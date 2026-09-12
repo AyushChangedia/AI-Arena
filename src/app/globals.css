@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AI AGENT ARENA — DESIGN TOKENS
+   Dark, editorial, technical. Two accent hues total: amber (A) and cyan (B).
+   Everything else is a step on one neutral ramp. Red is reserved for failure.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Neutral ramp — the entire structural palette */
+  --color-void: #050607;
+  --color-base: #0a0c0e;
+  --color-surface: #0f1216;
+  --color-raised: #14181d;
+  --color-line: #1d232a;
+  --color-line-strong: #2b333c;
+  --color-dim: #5a6570;
+  --color-mid: #8b959f;
+  --color-text: #dfe4e9;
+  --color-bright: #ffffff;
+
+  /* Agent A — amber */
+  --color-a: #e8a33d;
+  --color-a-deep: #2a1e0c;
+  --color-a-line: #4a3413;
+
+  /* Agent B — cyan */
+  --color-b: #4ecdc4;
+  --color-b-deep: #0c2523;
+  --color-b-line: #12403c;
+
+  /* Semantic */
+  --color-fail: #ff5f5f;
+  --color-fail-deep: #2a0f10;
+  --color-warn: #e8a33d;
+  --color-ok: #4ecdc4;
+
+  /* Type */
+  --font-display: var(--font-archivo), "Arial Narrow", system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  background: var(--color-void);
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-a);
+  color: var(--color-void);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-a);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scrollbars — thin, part of the instrument panel */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 0;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-dim);
+}
+
+/* ── Type utilities ───────────────────────────────────────────────────────── */
+
+@utility display {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 112, "wght" 700;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+@utility display-tight {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 100, "wght" 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+@utility mono-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ── Structure utilities ──────────────────────────────────────────────────── */
+
+/* Corner ticks — the arena's signature framing device, replaces card chrome */
+@utility ticked {
+  position: relative;
+}
+.ticked::before,
+.ticked::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-color: var(--color-line-strong);
+  border-style: solid;
+  pointer-events: none;
+}
+.ticked::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+.ticked::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+/* Static measurement grid. No animation — it is a backdrop, not a decoration. */
+@utility grid-field {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    color-mix(in srgb, var(--color-line-strong) 70%, transparent) 4px,
+    color-mix(in srgb, var(--color-line-strong) 70%, transparent) 5px
+  );
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────────── */
+
+@keyframes arena-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes arena-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+@keyframes arena-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@utility live-dot {
+  animation: arena-pulse 1.6s var(--ease-in-out-quart) infinite;
+}
+
+@utility sweep {
+  animation: arena-sweep 1.4s var(--ease-in-out-quart) infinite;
+}
+
+@utility rise-in {
+  animation: arena-rise 0.32s var(--ease-out-expo) both;
+}
+
+/* Reduced motion: every transition collapses to an instant state change. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Accessibility ────────────────────────────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-a);
+  color: var(--color-void);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
