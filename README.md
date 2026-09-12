@@ -24,8 +24,8 @@ That is the whole setup. No API key, no database, no container. Open
 
 ## Live demo
 
-**<https://ai-agent-arena-ayushchangedias-projects.vercel.app>** — deployed from `main`,
-redeployed on every push.
+**<https://ai-agent-arena-app.vercel.app>** — deployed from `main`, redeployed on every
+push.
 
 That instance is on Vercel, which is serverless, so treat its leaderboard as a showcase
 rather than a record: the store is per instance and does not survive a cold start
