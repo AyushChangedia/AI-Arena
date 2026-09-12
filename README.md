@@ -33,11 +33,8 @@ or put it on a host of your own in one click:
 Render is the one to use: it reads [`render.yaml`](render.yaml) and gives the app the
 persistent disk and single long-lived process it is designed around. Vercel builds with
 no configuration and is just as fast per match, but it is serverless — read
-[the caveats](#on-serverless-vercel) before you judge the leaderboard by it.
-
-> **This repository is private**, so both buttons resolve only for an account that can
-> already read it. Making it public turns them into working links for anyone; no code
-> changes. See [Deploying](#deploying) for the container route and Fly/Railway configs.
+[the caveats](#on-serverless-vercel) before you judge the leaderboard by it. See
+[Deploying](#deploying) for the container route and the Fly and Railway configs.
 
 Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
 deterministic policies in place of a model. Every match is labelled `DEMO`. See
