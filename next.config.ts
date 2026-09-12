@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  /**
+   * A self-contained server bundle for container deployment.
+   *
+   * Gated behind an env var rather than always on: the Docker build sets it,
+   * while platform builds that package the app themselves are left alone.
+   */
+  output: process.env.NEXT_OUTPUT_STANDALONE === "1" ? "standalone" : undefined,
   experimental: {
     optimizePackageImports: ["lucide-react", "motion"],
   },

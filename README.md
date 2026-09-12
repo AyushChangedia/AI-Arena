@@ -24,13 +24,10 @@ That is the whole setup. No API key, no database, no container. Open
 
 ## Live demo
 
-Deploy your own in one step — the app needs no API key, no database and no container:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
-
-A deployed instance runs in demo mode: real sandbox, real tools, real graders,
-deterministic policies in place of a model. Every match there is labelled `DEMO`. See
-[What is real, and what is not](#what-is-real-and-what-is-not).
+Run it locally with the two commands above, or deploy your own — see
+[Deploying](#deploying). Either way it runs in demo mode out of the box: real sandbox,
+real tools, real graders, deterministic policies in place of a model. Every match is
+labelled `DEMO`. See [What is real, and what is not](#what-is-real-and-what-is-not).
 
 ## Why an agent benchmark, and not another LLM leaderboard
 
@@ -194,11 +191,41 @@ port 3000.
 
 ## Deploying
 
-Deploys to Vercel with no configuration. One caveat worth knowing: the shipped store is
-file-backed and the event bus is in-process, so state lives per instance. That is fine
-for a single-user demo on a warm instance, and it is why `ArenaStore` and `EventBus` are
-interfaces — a multi-instance deployment wants a Postgres driver and a Redis bus behind
-them. On a serverless host the store writes to `/tmp` automatically.
+**Deploy it as one always-on container.** That is not a limitation, it is the shape the
+architecture assumes: on a single long-lived process the file-backed store and the
+in-process event bus are *correct as written*. `/data` persists across restarts, and the
+match engine and the SSE stream watching it are guaranteed to be in the same process.
+No Postgres, no Redis, no external service.
+
+```bash
+docker build -t ai-agent-arena .
+docker run -p 3000:3000 -v arena-data:/data ai-agent-arena
+```
+
+Config files are included for the three obvious hosts — [`render.yaml`](render.yaml)
+(Docker + a 1 GB persistent disk), [`fly.toml`](fly.toml) (a volume, with machine
+auto-stop deliberately disabled), and [`railway.json`](railway.json). Each mounts a
+volume at `/data` and health-checks `/api/health`.
+
+Verified end to end: matches, agents, Elo ratings and a 90-event replay all survive a
+hard process kill and restart against the same volume.
+
+### On serverless (Vercel)
+
+It deploys and builds with no configuration, and the app is just as fast — a demo match
+is ~200 ms of real sandbox work. But serverless splits apart the two things this design
+keeps together:
+
+| | Consequence |
+|---|---|
+| Store is per instance | Matches, agents and ratings do not survive a cold start or a second instance |
+| Event bus is in process | The live arena can come up blank if the SSE connection lands on a different instance than the run |
+| Function duration cap | Long *live* (model-driven) matches can be truncated; demo matches are unaffected |
+
+The store writes to `/tmp` there automatically, which helps within a warm instance and
+nothing beyond it. Making serverless genuinely correct means a Postgres driver behind
+`ArenaStore` and a Redis driver behind `EventBus` — which is precisely why those are
+interfaces, and precisely why a container is the better answer today.
 
 ## Deliberately not built
 

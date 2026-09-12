@@ -1,0 +1,32 @@
+# Render Blueprint — one always-on web service with a persistent disk.
+#
+# This is the deployment shape the shipped drivers assume: a single long-lived
+# process, so the file-backed store and the in-process event bus are correct as
+# written. Matches, agents and Elo ratings survive restarts and redeploys
+# because /data is a real mounted disk.
+services:
+  - type: web
+    name: ai-agent-arena
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: arena-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ARENA_DATA_DIR
+        value: /data
+      # Set these in the dashboard to promote DEMO matches to LIVE.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false

@@ -179,6 +179,21 @@ container, no migration, no connection string. The interface is shaped so a
 Postgres/Drizzle driver is a drop-in — every method is already a single logical query,
 and no caller reaches around it.
 
+### Deployment shape
+
+The store and the bus share an assumption: **one long-lived process**. Under that
+assumption both are correct rather than provisional — `/data` persists across restarts,
+and a running match and the SSE stream watching it are guaranteed to be in the same
+process. The shipped `Dockerfile`, `render.yaml`, `fly.toml` and `railway.json` all
+describe exactly that: a single container with a volume at `/data` and a health check
+at `/api/health`.
+
+Serverless breaks the assumption in two places at once — per-instance memory and
+per-invocation lifetime — so a deployment there loses state on cold start and can drop a
+live stream that lands on the wrong instance. Two drivers fix it (Postgres behind
+`ArenaStore`, Redis behind `EventBus`) and neither is written, because a container needs
+neither.
+
 ## 8. Data model
 
 ```
