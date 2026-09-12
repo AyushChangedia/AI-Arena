@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Shuffle } from "lucide-react";
 import type { Agent, Artifact, ExecutionEvent, Match, ScoreDimension, Side, Task } from "@/lib/arena/types";
+import { BRIEF_MAX, BRIEF_MIN } from "@/lib/tasks/brief";
 import { Button, Chip, Emblem, cx } from "@/components/ui/primitives";
 
 /**
@@ -18,6 +19,12 @@ import { Button, Chip, Emblem, cx } from "@/components/ui/primitives";
 /** Everything needed to render a finished match without another request. */
 export interface RanMatch {
   match: Match;
+  /**
+   * Taken from the response, not looked up by id. A match built from a typed
+   * brief has a task that exists only for that brief, so it is not in the
+   * library the picker was given.
+   */
+  task: Task;
   events: ExecutionEvent[];
   final: Record<Side, FinalSide>;
 }
@@ -35,6 +42,7 @@ type RunResponse =
   | {
       streamInstead: false;
       match: Match;
+      task: Task | null;
       events: ExecutionEvent[];
       sides: {
         side: Side;
@@ -49,15 +57,20 @@ export function MatchBuilder({
   agents,
   tasks,
   onRan,
+  initialBrief = "",
 }: {
   agents: Agent[];
   tasks: Task[];
   onRan: (ran: RanMatch) => void;
+  /** Prefilled when someone arrived from the front page having typed a brief. */
+  initialBrief?: string;
 }) {
   const router = useRouter();
   const [agentA, setAgentA] = useState<string>(agents[0]?.id ?? "");
   const [agentB, setAgentB] = useState<string>(agents[1]?.id ?? "");
   const [taskId, setTaskId] = useState<string>(tasks[0]?.id ?? "");
+  const [source, setSource] = useState<"library" | "brief">(initialBrief ? "brief" : "library");
+  const [brief, setBrief] = useState(initialBrief);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,7 +94,15 @@ export function MatchBuilder({
     };
   }, [a, b, task]);
 
-  const blocked = !a || !b || !task || sameAgent || toolGap?.emptyA || toolGap?.emptyB;
+  const usingBrief = source === "brief";
+  const briefTooShort = usingBrief && brief.trim().length < BRIEF_MIN;
+  const blocked =
+    !a ||
+    !b ||
+    sameAgent ||
+    (usingBrief ? briefTooShort : !task) ||
+    // Tool gaps only mean something against a known task's allow-list.
+    (!usingBrief && (toolGap?.emptyA || toolGap?.emptyB));
 
   /**
    * Run the match in a single request and show it here.
@@ -102,7 +123,11 @@ export function MatchBuilder({
       const response = await fetch("/api/matches/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ taskId, agentAId: agentA, agentBId: agentB }),
+        body: JSON.stringify(
+          usingBrief
+            ? { brief: brief.trim(), agentAId: agentA, agentBId: agentB }
+            : { taskId, agentAId: agentA, agentBId: agentB },
+        ),
       });
       const body = (await response.json()) as {
         ok: boolean;
@@ -118,8 +143,18 @@ export function MatchBuilder({
         router.push(`/arena/${body.data.matchId}?start=1`);
         return;
       }
+      const ran = body.data;
+      // From the response, not the picker: a brief's task exists only for that
+      // brief and is not in the library this component was handed.
+      const ranTask = ran.task ?? tasks.find((t) => t.id === ran.match.taskId);
+      if (!ranTask) {
+        setError("The match ran but its task could not be read back.");
+        setPending(false);
+        return;
+      }
+
       const final = {} as Record<Side, FinalSide>;
-      for (const side of body.data.sides) {
+      for (const side of ran.sides) {
         final[side.side] = {
           total: side.score?.total ?? null,
           dimensions: side.score?.dimensions ?? [],
@@ -128,7 +163,7 @@ export function MatchBuilder({
           artifacts: side.artifacts,
         };
       }
-      onRan({ match: body.data.match, events: body.data.events, final });
+      onRan({ match: ran.match, task: ranTask, events: ran.events, final });
     } catch {
       setError("Could not reach the arena. Check the server is running.");
       setPending(false);
@@ -161,8 +196,60 @@ export function MatchBuilder({
         <div className="border border-line bg-base">
           <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
             <StepBadge n={1} />
-            <span className="mono-label text-dim">Pick a task</span>
+            <span className="mono-label text-dim">Choose the job</span>
           </div>
+
+          <div className="grid grid-cols-2 gap-px border-b border-line bg-line">
+            {(
+              [
+                ["library", "Task library"],
+                ["brief", "Write your own"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSource(value)}
+                aria-pressed={source === value}
+                className={cx(
+                  "mono-label px-3 py-2.5 transition-colors",
+                  source === value ? "bg-surface text-a" : "bg-base text-dim hover:text-mid",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {usingBrief ? (
+            <div className="p-4">
+              <label htmlFor="brief" className="mono-label block text-dim">
+                What should they build?
+              </label>
+              <textarea
+                id="brief"
+                value={brief}
+                onChange={(e) => setBrief(e.target.value.slice(0, BRIEF_MAX))}
+                rows={5}
+                placeholder="Build me a coffee shop landing page for a roastery called Ember, with a menu and opening hours."
+                className="mt-2 w-full resize-y border border-line bg-void px-3 py-2.5 text-sm leading-relaxed text-text outline-none placeholder:text-dim focus:border-line-strong"
+              />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="mono-label text-dim">
+                  {briefTooShort ? `At least ${BRIEF_MIN} characters` : "Both agents get this verbatim"}
+                </span>
+                <span className="tnum font-mono text-[11px] text-dim">
+                  {brief.trim().length}/{BRIEF_MAX}
+                </span>
+              </div>
+              <p className="mt-4 border-t border-line pt-3 text-[13px] leading-relaxed text-dim">
+                Your brief has no answer key, so it is graded on what can be checked without one:
+                the artifact exists, it is structurally sound, and it is
+                <span className="text-mid"> about what you asked for</span>. That is a weaker
+                signal than the library tasks, which assert correctness.
+              </p>
+            </div>
+          ) : (
           <div className="p-2 lg:max-h-[280px] lg:overflow-y-auto">
             {tasks.map((t) => (
               <button
@@ -189,9 +276,10 @@ export function MatchBuilder({
               </button>
             ))}
           </div>
+          )}
         </div>
 
-        {task ? (
+        {task && !usingBrief ? (
           <div className="border border-line bg-base p-4">
             <p className="text-[13px] leading-relaxed text-dim">{task.brief}</p>
             <dl className="mt-4 grid grid-cols-3 gap-px bg-line">
@@ -202,7 +290,7 @@ export function MatchBuilder({
           </div>
         ) : null}
 
-        {toolGap && !sameAgent ? (
+        {toolGap && !sameAgent && !usingBrief ? (
           <div className="border border-line bg-base p-4">
             <p className="mono-label mb-3 text-dim">Before they start</p>
             {toolGap.emptyA || toolGap.emptyB ? (
@@ -270,7 +358,7 @@ export function MatchBuilder({
             {pending ? "Running the match…" : "Start match"}
             {!pending ? <ArrowRight size={13} aria-hidden /> : null}
           </Button>
-          <Button onClick={randomise} title="Pick a random pairing">
+          <Button onClick={randomise} title="Pick a random pairing" aria-label="Pick a random pairing">
             <Shuffle size={13} aria-hidden />
           </Button>
         </div>

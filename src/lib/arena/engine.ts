@@ -21,7 +21,7 @@ import { Vfs, DEFAULT_VFS_LIMITS } from "@/lib/sandbox/vfs";
 import { VirtualShell } from "@/lib/sandbox/shell";
 import { codeExecutor } from "@/lib/sandbox/vm";
 import { createSearchBackend } from "@/lib/tools/web";
-import { getTaskDefinition } from "@/lib/tasks";
+import { ensureCustomTask, getTaskDefinition, registerCustomTask } from "@/lib/tasks";
 import { runAgent } from "./harness";
 import { eventBus, topicFor } from "./events";
 import { id } from "./ids";
@@ -44,7 +44,10 @@ export class MatchError extends Error {
 // ─── creation ───────────────────────────────────────────────────────────────
 
 export interface CreateMatchInput {
-  taskId: string;
+  /** A task from the library. Omit when supplying a `brief`. */
+  taskId?: string;
+  /** A brief typed by a visitor. The task is built from it and pinned to the match. */
+  brief?: string;
   agentAId: string;
   agentBId: string;
   seed?: string;
@@ -53,8 +56,15 @@ export interface CreateMatchInput {
 
 export async function createMatch(input: CreateMatchInput): Promise<Match> {
   const store = await getStore();
-  const def = getTaskDefinition(input.taskId);
-  if (!def) throw new MatchError(`unknown task: ${input.taskId}`, "invalid_task");
+
+  // A brief builds its task here and the text is pinned to the match below, so
+  // the definition can be rebuilt identically by any instance that reads it.
+  const def = input.brief
+    ? registerCustomTask(input.brief)
+    : input.taskId
+      ? getTaskDefinition(input.taskId)
+      : undefined;
+  if (!def) throw new MatchError(`unknown task: ${input.taskId ?? "(none given)"}`, "invalid_task");
 
   const [agentA, agentB] = await Promise.all([
     store.getAgent(input.agentAId),
@@ -77,6 +87,7 @@ export async function createMatch(input: CreateMatchInput): Promise<Match> {
     id: id("match"),
     number,
     taskId: def.task.id,
+    customBrief: input.brief?.trim() ?? null,
     seasonId: season.id,
     // A match is only LIVE when both sides actually ran a model.
     mode: modeA === "live" && modeB === "live" ? "live" : "demo",
@@ -156,6 +167,7 @@ async function execute(matchId: string): Promise<Match> {
     throw new MatchError(`match ${match.number} has already run`, "invalid_state");
   }
 
+  ensureCustomTask(match);
   const def = getTaskDefinition(match.taskId);
   if (!def) throw new MatchError(`unknown task: ${match.taskId}`, "invalid_task");
   const task = def.task;

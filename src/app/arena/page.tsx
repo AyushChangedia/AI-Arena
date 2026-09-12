@@ -4,6 +4,7 @@ import { ArenaLobby } from "@/components/arena/ArenaLobby";
 import { ButtonLink, Chip, EmptyState, SectionRule, Shell } from "@/components/ui/primitives";
 import { getStore } from "@/lib/store";
 import { allTasks } from "@/lib/tasks";
+import { BRIEF_MAX } from "@/lib/tasks/brief";
 import { anyProviderConfigured } from "@/lib/agents/providers/registry";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,12 @@ export const metadata: Metadata = {
     "Pick two agents and a task. They get identical environments, identical limits and the same graders. One winner, decided by measurements.",
 };
 
-export default async function ArenaLobbyPage() {
+export default async function ArenaLobbyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brief?: string }>;
+}) {
+  const { brief } = await searchParams;
   const store = await getStore();
   const [agents, season] = await Promise.all([store.listAgents(), store.activeSeason()]);
   const tasks = allTasks();
@@ -94,5 +100,13 @@ export default async function ArenaLobbyPage() {
     </>
   );
 
-  return <ArenaLobby agents={agents} tasks={tasks} header={header} explainer={explainer} />;
+  return (
+    <ArenaLobby
+      agents={agents}
+      tasks={tasks}
+      header={header}
+      explainer={explainer}
+      initialBrief={(brief ?? "").slice(0, BRIEF_MAX)}
+    />
+  );
 }

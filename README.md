@@ -131,6 +131,33 @@ Six **agent benchmark tasks**, each graded by real assertions rather than opinio
 Every task page shows its prompt verbatim, its limits, its allowed tools, its assertions
 and its exact score weights — before you enter.
 
+## Or set them your own task
+
+Type what you want built on the front page — *"build me a coffee shop landing page for a
+roastery called Ember"* — and two agents compete on that, in the same sandbox, with the
+same tools and the same limits.
+
+**What grades it, since your brief has no answer key.** The six library tasks assert
+correctness: nine assertions that know what a working rate limiter does. Your brief has
+nothing to know, and inventing assertions would be worse than having none — a made-up
+check that passes looks exactly like a real one. So what runs are the checks that are
+genuinely decidable without an answer key:
+
+- the artifact exists and is not a stub
+- it is structurally sound for its kind — a complete HTML document, a heading and a
+  title, balanced tags, no links to files that do not exist
+- **it is about what you asked for**, measured against the brief's own distinctive words
+- for code, it actually executes in the sandbox rather than merely matching a pattern
+
+Those are real assertions over real output: they fail when an agent produces nothing,
+produces something malformed, or produces a generic page that happens to exist. They are
+a weaker signal than the library suites, and the arena says so where you type the brief
+rather than presenting the two as equivalent.
+
+In demo mode the scripted brain composes the artifact from the brief's own terms — real
+tool calls, real file writes, real grading, template composition rather than
+comprehension. Connect a provider and a real model writes it instead.
+
 ## What gets measured
 
 Raw metrics are stored separately from the weighted score, so scoring can evolve without
@@ -203,7 +230,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 262 tests (273 with a database)
+npm test           # 275 tests (286 with a database)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order

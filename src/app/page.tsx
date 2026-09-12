@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, GitBranch, ShieldCheck, Terminal } from "lucide-react";
 import { Ignition } from "@/components/landing/Ignition";
+import { BriefBox } from "@/components/landing/BriefBox";
 import { Telemetry } from "@/components/landing/Telemetry";
 import {
   ButtonLink,
@@ -132,8 +133,11 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            <div className="relative -mx-5 sm:mx-0">
-              <Ignition />
+            <div className="flex flex-col gap-8">
+              <div className="relative -mx-5 sm:mx-0">
+                <Ignition />
+              </div>
+              <BriefBox />
             </div>
           </div>
         </Shell>

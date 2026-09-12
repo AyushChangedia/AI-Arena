@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BRIEF_MAX, BRIEF_MIN } from "@/lib/tasks/brief";
 import { TOOL_NAMES } from "@/lib/tools/registry";
 import type { AgentConfig } from "@/lib/arena/types";
 
@@ -73,13 +74,23 @@ export const updateAgentSchema = z.object({
   visibility: z.enum(["public", "private"]).optional(),
 });
 
-export const createMatchSchema = z.object({
-  taskId: z.string().min(1, "Pick a task."),
-  agentAId: z.string().min(1, "Pick the first agent."),
-  agentBId: z.string().min(1, "Pick the second agent."),
-  seed: z.string().max(80).optional(),
-  rated: z.boolean().optional(),
-});
+export const createMatchSchema = z
+  .object({
+    /** A task from the library. */
+    taskId: z.string().min(1).optional(),
+    /** A brief typed by a visitor. Bounded here because it becomes a prompt. */
+    brief: z.string().min(BRIEF_MIN).max(BRIEF_MAX).optional(),
+    agentAId: z.string().min(1, "Pick the first agent."),
+    agentBId: z.string().min(1, "Pick the second agent."),
+    seed: z.string().max(80).optional(),
+    rated: z.boolean().optional(),
+  })
+  // Exactly one source of the task. Accepting both would leave it ambiguous
+  // which one the agents were actually given.
+  .refine((v) => Boolean(v.taskId) !== Boolean(v.brief), {
+    message: "Give either a task or a brief, not both.",
+    path: ["taskId"],
+  });
 
 export type AgentConfigInput = z.input<typeof agentConfigSchema>;
 

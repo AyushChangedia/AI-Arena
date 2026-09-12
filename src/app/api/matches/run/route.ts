@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createMatch, MatchError, resolveMode, startMatch } from "@/lib/arena/engine";
 import { createMatchSchema } from "@/lib/agents/schema";
+import { validateBrief } from "@/lib/tasks/brief";
 import { getMatchDetail } from "@/lib/server/queries";
 import { fail, guard, ok, parseBody } from "@/lib/server/api";
 import { clientKey, rateLimit } from "@/lib/server/rate-limit";
@@ -38,6 +39,14 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await parseBody(request, createMatchSchema);
     if (error) return error;
+
+    // Length is checked by the schema; this checks it says something a grader
+    // can actually be built from.
+    if (data.brief) {
+      const checked = validateBrief(data.brief);
+      if (!checked.ok) return fail("unprocessable", checked.reason);
+      data.brief = checked.brief;
+    }
 
     try {
       const created = await createMatch(data);

@@ -17,7 +17,7 @@ import type {
   ToolCall,
 } from "@/lib/arena/types";
 import { getStore } from "@/lib/store";
-import { getTask } from "@/lib/tasks";
+import { ensureCustomTask, getTask } from "@/lib/tasks";
 import { ratingSystem } from "@/lib/rating/elo";
 import { explainWin, type WinFactor } from "@/lib/eval/scoring";
 
@@ -58,6 +58,8 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail | nul
   const store = await getStore();
   const match = await store.getMatch(matchId);
   if (!match) return null;
+  // A custom task exists only as a brief on the match until it is rebuilt.
+  ensureCustomTask(match);
 
   const [season, events] = await Promise.all([
     store.getSeason(match.seasonId),
@@ -289,6 +291,7 @@ export async function getLeaderboard(options: LeaderboardOptions = {}): Promise<
     })),
   );
 
+  for (const m of matches) ensureCustomTask(m);
   const relevant = matches.filter((m) => scope === "overall" || getTask(m.taskId)?.category === scope);
   const demoShare = relevant.length
     ? relevant.filter((m) => m.mode === "demo").length / relevant.length
@@ -366,6 +369,9 @@ export async function listRecentMatches(limit = 8): Promise<
 > {
   const store = await getStore();
   const matches = await store.listMatches({ limit });
+  // A match built from a typed brief carries that brief; rebuilding its task is
+  // what makes it readable at all.
+  for (const match of matches) ensureCustomTask(match);
   return Promise.all(
     matches.map(async (match) => ({
       match,

@@ -23,20 +23,22 @@ export function ArenaLobby({
   tasks,
   header,
   explainer,
+  initialBrief = "",
 }: {
   agents: Agent[];
   tasks: Task[];
   header: React.ReactNode;
   explainer: React.ReactNode;
+  /** Carried from the front page when someone typed a brief there. */
+  initialBrief?: string;
 }) {
   const [ran, setRan] = useState<RanMatch | null>(null);
-  const task = ran ? (tasks.find((t) => t.id === ran.match.taskId) ?? null) : null;
 
-  if (ran && task) {
+  if (ran) {
     return (
       <ArenaStage
         match={ran.match}
-        task={task}
+        task={ran.task}
         autoStart={false}
         recorded={ran.events}
         initialFinal={ran.final}
@@ -48,7 +50,7 @@ export function ArenaLobby({
     <Shell className="py-10">
       {header}
       <div className="mt-10">
-        <MatchBuilder agents={agents} tasks={tasks} onRan={setRan} />
+        <MatchBuilder agents={agents} tasks={tasks} onRan={setRan} initialBrief={initialBrief} />
       </div>
       <div className="mt-14">{explainer}</div>
     </Shell>

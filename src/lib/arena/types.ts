@@ -379,6 +379,13 @@ export interface Match {
   id: Id;
   number: number;
   taskId: Id;
+  /**
+   * The brief this match was built from, when it came from a typed request
+   * rather than the task library. Stored on the match because a custom task
+   * cannot be recovered from its id — the id is a hash of this text — and any
+   * instance may need to rebuild it to read the match back.
+   */
+  customBrief?: string | null;
   seasonId: Id;
   mode: ExecutionMode;
   status: MatchStatus;
