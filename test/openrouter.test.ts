@@ -36,7 +36,12 @@ function request(overrides: Partial<ProviderRequest> = {}): ProviderRequest {
   };
 }
 
-/** Stands in for OpenRouter. Returns the captured request for assertions. */
+/**
+ * Stands in for OpenRouter. Returns the captured requests for assertions.
+ *
+ * The provider checks the model catalogue before completing, so assertions pick
+ * the completion call by URL rather than assuming it is the first one.
+ */
 function stubFetch(status: number, body: unknown) {
   const calls: { url: string; init: RequestInit }[] = [];
   vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
@@ -46,6 +51,13 @@ function stubFetch(status: number, body: unknown) {
     );
   });
   return calls;
+}
+
+/** The completion request, skipping any catalogue lookup that preceded it. */
+function completion(calls: { url: string; init: RequestInit }[]) {
+  const call = calls.find((c) => c.url.endsWith("/chat/completions"));
+  if (!call) throw new Error("no completion request was made");
+  return call;
 }
 
 const KEY = { OPENROUTER_API_KEY: "sk-or-v1-test" };
@@ -102,7 +114,7 @@ describe("a successful turn", () => {
 
     await new OpenRouterProvider(KEY).next(request());
 
-    const call = calls[0]!;
+    const call = completion(calls);
     expect(call.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     const headers = call.init.headers as Record<string, string>;
     expect(headers.authorization).toBe("Bearer sk-or-v1-test");
@@ -179,7 +191,7 @@ describe("a successful turn", () => {
         ],
       }),
     );
-    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: Record<string, unknown>[] };
+    const body = JSON.parse(String(completion(calls).init.body)) as { messages: Record<string, unknown>[] };
     const assistant = body.messages.find((m) => m.role === "assistant")!;
     expect((assistant.tool_calls as { id: string }[])[0]!.id).toBe("call_1");
     const tool = body.messages.find((m) => m.role === "tool")!;
@@ -315,5 +327,66 @@ describe("a match built from a typed brief stays readable", () => {
     expect(page).toMatch(/ensureCustomTask\(match\)/);
     // Both the page and its metadata read the task, so both need it.
     expect(page.match(/ensureCustomTask\(match\)/g)).toHaveLength(2);
+  });
+});
+
+describe("surviving a retired free model", () => {
+  function stubRouter(dead: string[], alive: string) {
+    vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+      const json = (status: number, body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }),
+        );
+      if (String(url).endsWith("/models")) {
+        return json(200, {
+          data: [
+            { id: alive, name: "Alive", supported_parameters: ["tools"] },
+            { id: "vendor/chat-only:free", name: "Chat only", supported_parameters: [] },
+          ],
+        });
+      }
+      const body = JSON.parse(String(init.body)) as { model: string };
+      if (dead.includes(body.model)) {
+        return json(404, {
+          error: { message: "This model is unavailable for free. The paid version is available now" },
+        });
+      }
+      return json(200, { choices: [{ message: { content: "ok" } }], usage: {} });
+    });
+  }
+
+  it("runs on a live free model when the configured one has been retired", async () => {
+    // The exact failure seen in production: the id was real when it shipped and
+    // is now paid-only. Hard-coded ids rot, so the request is repointed rather
+    // than the run abandoned.
+    const dead = "google/gemini-2.0-flash-exp:free";
+    stubRouter([dead], "vendor/alive:free");
+
+    const turn = await new OpenRouterProvider(KEY).next(request({ model: dead }));
+    expect(turn.modelUsed).toBe("vendor/alive:free");
+    // Still free, so the cost is still a measured zero.
+    expect(turn.usage.costUsd).toBe(0);
+  });
+
+  it("never silently substitutes a model that cannot call tools", async () => {
+    stubRouter(["vendor/dead:free"], "vendor/alive:free");
+    const turn = await new OpenRouterProvider(KEY).next(request({ model: "vendor/dead:free" }));
+    expect(turn.modelUsed).not.toBe("vendor/chat-only:free");
+  });
+
+  it("leaves a paid model exactly as asked", async () => {
+    // Substituting here would spend money on something nobody chose.
+    stubRouter(["openai/gpt-4o"], "vendor/alive:free");
+    const error = await new OpenRouterProvider(KEY)
+      .next(request({ model: "openai/gpt-4o" }))
+      .then(() => null)
+      .catch((e: unknown) => e as ProviderError);
+    expect(error!.kind).toBe("unavailable");
+  });
+
+  it("uses the requested model untouched when it is still alive", async () => {
+    stubRouter([], "vendor/alive:free");
+    const turn = await new OpenRouterProvider(KEY).next(request({ model: "vendor/alive:free" }));
+    expect(turn.modelUsed).toBe("vendor/alive:free");
   });
 });

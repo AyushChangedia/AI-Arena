@@ -45,6 +45,12 @@ export interface ProviderUsage {
 }
 
 export interface ProviderTurn {
+  /**
+   * The model that actually answered, when it differs from the one requested.
+   * A router may substitute one; reporting the substitution is the difference
+   * between a leaderboard and a fiction.
+   */
+  modelUsed?: string;
   /** Free text the model produced alongside (or instead of) tool calls. */
   text: string;
   toolCalls: ProviderToolCall[];

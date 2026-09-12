@@ -55,6 +55,9 @@ const DEFAULT_FREE_MODELS: { id: string; label: string }[] = [
 /** Used when an agent names a model this adapter does not recognise. */
 export const DEFAULT_FREE_MODEL = DEFAULT_FREE_MODELS[0]!.id;
 
+/** How long a fetched free-model list stays good for. */
+const CATALOGUE_TTL_MS = 5 * 60_000;
+
 export interface DiscoveredModel {
   id: string;
   label: string;
@@ -125,12 +128,16 @@ export class OpenRouterProvider implements ModelProvider {
   readonly label = "OpenRouter";
   readonly models: { id: string; label: string }[];
 
+  private readonly env: Record<string, string | undefined>;
+  /** Short-lived: the free list changes, but not between steps of one match. */
+  private catalogue: { at: number; models: DiscoveredModel[] } | null = null;
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
   private readonly referer: string | undefined;
   private readonly title: string;
 
   constructor(env: Record<string, string | undefined> = process.env) {
+    this.env = env;
     this.apiKey = env.OPENROUTER_API_KEY?.trim() || undefined;
     this.baseUrl = (env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
     this.models = parseModels(env.OPENROUTER_MODELS) ?? DEFAULT_FREE_MODELS;
@@ -148,6 +155,47 @@ export class OpenRouterProvider implements ModelProvider {
   /** Free ids end in `:free`, so a zero cost is a fact rather than a guess. */
   private isFree(model: string): boolean {
     return model.endsWith(":free");
+  }
+
+  /**
+   * Which free models exist right now, cached for a few minutes.
+   *
+   * Empty means "could not ask", which is deliberately not the same as "none
+   * exist": the caller falls back to using the model as requested rather than
+   * refusing to run.
+   */
+  private async liveFreeModels(signal: AbortSignal): Promise<DiscoveredModel[]> {
+    if (this.catalogue && Date.now() - this.catalogue.at < CATALOGUE_TTL_MS) {
+      return this.catalogue.models;
+    }
+    const models = (await discoverFreeModels(this.env, signal)) ?? [];
+    // Only cache a real answer, so a blip does not pin an empty list.
+    if (models.length > 0) this.catalogue = { at: Date.now(), models };
+    return models;
+  }
+
+  /**
+   * Turn a requested free model into one OpenRouter will actually serve.
+   *
+   * Free ids are promotional and get retired constantly — "This model is
+   * unavailable for free, the paid version is available now" is the routine
+   * reply, and hard-coding ids means the arena breaks every time that happens.
+   * So the list is read from OpenRouter and the request is pointed at something
+   * live. Paid ids are left exactly as asked: substituting one would spend
+   * money the caller did not agree to.
+   */
+  private async resolveModel(requested: string, signal: AbortSignal): Promise<string> {
+    if (!this.isFree(requested)) return requested;
+
+    const live = await this.liveFreeModels(signal);
+    if (live.length === 0) return requested;
+
+    const asked = live.find((m) => m.id === requested);
+    if (asked?.supportsTools) return requested;
+
+    // Every task here is tool-driven, so a model that cannot call tools is no
+    // substitute at all — it would talk instead of acting.
+    return live.find((m) => m.supportsTools)?.id ?? requested;
   }
 
   async next(req: ProviderRequest): Promise<ProviderTurn> {
@@ -179,7 +227,10 @@ export class OpenRouterProvider implements ModelProvider {
       messages.push({ role: m.role, content: m.content });
     }
 
-    const data = await this.post(req, messages);
+    // Resolved before the call, not after a failure: a retired free id is the
+    // normal case here, not the exception.
+    const model = await this.resolveModel(req.model, req.signal);
+    const data = await this.post({ ...req, model }, messages);
 
     // OpenRouter answers 200 with an error body when the upstream provider
     // fails, so a non-2xx check alone would let a failed turn through as an
@@ -209,6 +260,7 @@ export class OpenRouterProvider implements ModelProvider {
     const tokensOut = data.usage?.completion_tokens ?? null;
 
     return {
+      modelUsed: model,
       text: (message?.content ?? "").trim(),
       toolCalls,
       done: toolCalls.length === 0,
@@ -218,7 +270,7 @@ export class OpenRouterProvider implements ModelProvider {
         // A `:free` model costs nothing, and 0 is the measured truth. Anything
         // else priced through OpenRouter varies by upstream and is reported as
         // "—" rather than guessed from a stale table.
-        costUsd: this.isFree(req.model) ? 0 : null,
+        costUsd: this.isFree(model) ? 0 : null,
       },
     };
   }

@@ -379,7 +379,10 @@ async function execute(matchId: string): Promise<Match> {
         side: s.participant.side,
         mode: s.mode,
         provider: s.participant.configSnapshot.model.provider,
-        model: s.participant.configSnapshot.model.model,
+        // What actually answered, which a router may substitute when a free
+        // model is retired. Storing the configured id instead would attribute a
+        // run to a model that never saw it.
+        model: result.servedModel ?? s.participant.configSnapshot.model.model,
         startedAt,
         endedAt: Date.now(),
         durationMs: result.durationMs,

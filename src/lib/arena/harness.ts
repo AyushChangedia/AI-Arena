@@ -56,6 +56,8 @@ export interface HarnessOptions {
 
 export interface HarnessResult {
   outcome: ExecutionOutcome;
+  /** The model that actually answered — a router may substitute a retired one. */
+  servedModel: string;
   state: AgentState;
   steps: number;
   durationMs: number;
@@ -90,6 +92,8 @@ export async function runAgent(opts: HarnessOptions): Promise<HarnessResult> {
   let finalMessage: string | null = null;
   let outcome: ExecutionOutcome | null = null;
   let error: string | null = null;
+  /** What is actually answering, which a router may change mid-run. */
+  let servedModel = opts.config.model.model;
   let state: AgentState = "idle";
   /** Tracked explicitly: `state` is mutated through a closure, so narrowing it is unsound. */
   let recovering = false;
@@ -178,7 +182,7 @@ export async function runAgent(opts: HarnessOptions): Promise<HarnessResult> {
     let turn;
     try {
       turn = await opts.provider.next({
-        model: opts.config.model.model,
+        model: servedModel,
         systemPrompt: buildSystemPrompt(opts.config, opts.task, catalogue),
         messages,
         tools: catalogue,
@@ -196,6 +200,16 @@ export async function runAgent(opts: HarnessOptions): Promise<HarnessResult> {
       setState("failed");
       outcome = pe?.kind === "aborted" ? "cancelled" : "provider_error";
       break;
+    }
+
+    // A router may answer on a different model than the one asked for, which
+    // happens routinely when a free id is retired. Announced once, so the run is
+    // never silently attributed to a model that did not produce it.
+    if (turn.modelUsed && turn.modelUsed !== servedModel) {
+      servedModel = turn.modelUsed;
+      emit("agent.message", `Running on ${turn.modelUsed}`, {
+        detail: `${opts.config.model.model} was not available, so the provider served ${turn.modelUsed} instead.`,
+      });
     }
 
     // Accumulate usage. Demo runs report nothing, and nothing is invented.
@@ -398,6 +412,7 @@ export async function runAgent(opts: HarnessOptions): Promise<HarnessResult> {
 
     return {
       outcome: result,
+      servedModel,
       state,
       steps,
       durationMs: Date.now() - startedAt,

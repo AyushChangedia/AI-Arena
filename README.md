@@ -138,9 +138,12 @@ OPENROUTER_MODELS="vendor/model:free|Nice Label, vendor/other:free"
 Every model in the arena needs **tool calling** — a model that cannot call tools will talk
 instead of acting and score near zero on a task it never attempted.
 
-**The table above is a guess frozen at build time**, so `/system` asks OpenRouter which
-free models exist *right now* and lists the tool-capable ones. If an agent reports
-**Model unavailable**, that list is where the working ids are.
+**Those ids are a starting point, not a promise.** Free models are retired constantly —
+"this model is unavailable for free, the paid version is available now" is the routine
+reply. So the arena does not depend on them: before each turn it asks OpenRouter which
+free models exist right now and points the request at a live, tool-capable one, saying so
+in the run when it substitutes. Nothing to paste, nothing to redeploy. `/system` lists the
+same set if you want to pin a specific model with `OPENROUTER_MODELS`.
 
 Direct `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GOOGLE_API_KEY` still work if you happen
 to have them, and are never required. Adding a vendor is one file implementing
@@ -261,7 +264,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 300 tests (311 with a database)
+npm test           # 304 tests (315 with a database)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order
