@@ -1,9 +1,18 @@
-# Render Blueprint — one always-on web service with a persistent disk.
+# Render Blueprint — a web service and the Postgres it stores everything in.
 #
-# This is the deployment shape the shipped drivers assume: a single long-lived
-# process, so the file-backed store and the in-process event bus are correct as
-# written. Matches, agents and Elo ratings survive restarts and redeploys
-# because /data is a real mounted disk.
+# Provisioned together so a one-click deploy lands on the full product rather
+# than a demo that forgets itself: DATABASE_URL is wired from the database
+# below, so matches, agents, Elo ratings and votes are shared across instances
+# and survive every restart and redeploy with nothing to configure.
+#
+# The disk is still mounted. It is the fallback the app uses if the database is
+# ever unreachable, and it costs nothing to keep.
+databases:
+  - name: arena-db
+    databaseName: arena
+    user: arena
+    plan: basic-256mb
+
 services:
   - type: web
     name: ai-agent-arena
@@ -21,6 +30,18 @@ services:
         value: production
       - key: ARENA_DATA_DIR
         value: /data
+      # Shared, durable storage. Everything else follows from this one variable.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arena-db
+          property: connectionString
+      # The public origin, so canonical tags and Open Graph point at the real
+      # host rather than the platform's internal one.
+      - key: NEXT_PUBLIC_SITE_URL
+        fromService:
+          name: ai-agent-arena
+          type: web
+          property: host
       # Set these in the dashboard to promote DEMO matches to LIVE.
       - key: ANTHROPIC_API_KEY
         sync: false

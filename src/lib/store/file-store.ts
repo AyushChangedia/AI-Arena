@@ -59,9 +59,12 @@ export class FileStore implements ArenaStore {
   private scores = new Map<string, Score>();
   private ratings = new Map<string, Rating>();
   private seasons = new Map<string, Season>();
+  /** matchId -> voterId -> side. One vote per viewer, changeable. */
+  private votes = new Map<string, Map<string, "A" | "B">>();
 
   private timer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
+  private matchCounter: number | null = null;
   private persistent = true;
   private warned = false;
   private readonly file: string;
@@ -246,9 +249,16 @@ export class FileStore implements ArenaStore {
   }
 
   async nextMatchNumber(): Promise<number> {
-    let max = 1000;
-    for (const m of this.matches.values()) max = Math.max(max, m.number);
-    return max + 1;
+    // Reserved, not merely observed. Deriving it from max(number) hands the
+    // same number to every caller that asks before the first one has stored
+    // its match — two matches started in the same tick collided.
+    if (this.matchCounter === null) {
+      let max = 1000;
+      for (const m of this.matches.values()) max = Math.max(max, m.number);
+      this.matchCounter = max;
+    }
+    this.matchCounter += 1;
+    return this.matchCounter;
   }
 
   // ── executions ────────────────────────────────────────────────────────────
@@ -270,7 +280,12 @@ export class FileStore implements ArenaStore {
   }
 
   async saveEvents(matchId: string, events: ExecutionEvent[]): Promise<void> {
-    this.events.set(matchId, events);
+    // Merge on seq rather than replace, so a caller appending a later slice of
+    // a running match does not truncate the trace, and read back in sequence
+    // order rather than arrival order.
+    const merged = new Map((this.events.get(matchId) ?? []).map((e) => [e.seq, e]));
+    for (const event of events) merged.set(event.seq, event);
+    this.events.set(matchId, [...merged.values()].sort((a, b) => a.seq - b.seq));
     this.schedule();
   }
 
@@ -355,6 +370,30 @@ export class FileStore implements ArenaStore {
   }
 
   /** True when snapshots are reaching disk. Surfaced on the system status page. */
+  // ── votes ─────────────────────────────────────────────────────────────────
+
+  async castVote(matchId: string, voterId: string, side: "A" | "B"): Promise<void> {
+    const forMatch = this.votes.get(matchId) ?? new Map<string, "A" | "B">();
+    forMatch.set(voterId, side);
+    this.votes.set(matchId, forMatch);
+    this.schedule();
+  }
+
+  async getVotes(
+    matchId: string,
+    voterId?: string,
+  ): Promise<{ A: number; B: number; mine: "A" | "B" | null }> {
+    const forMatch = this.votes.get(matchId);
+    if (!forMatch) return { A: 0, B: 0, mine: null };
+    let a = 0;
+    let b = 0;
+    for (const side of forMatch.values()) {
+      if (side === "A") a += 1;
+      else b += 1;
+    }
+    return { A: a, B: b, mine: (voterId && forMatch.get(voterId)) || null };
+  }
+
   get isPersistent(): boolean {
     return this.persistent;
   }

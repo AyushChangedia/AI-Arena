@@ -206,13 +206,32 @@ process. The shipped `Dockerfile`, `render.yaml`, `fly.toml` and `railway.json` 
 describe exactly that: a single container with a volume at `/data` and a health check
 at `/api/health`.
 
-Serverless breaks the assumption in two places at once — per-instance memory and
-per-invocation lifetime. Running a match survives that, because the single-request path
-above needs no shared state at all. What does not survive is everything meant to
-accumulate: the leaderboard, the match history, and permalinks to past matches all read
-empty once the instance that produced them is gone. Two drivers fix that (Postgres behind
-`ArenaStore`, Redis behind `EventBus`); neither is written, because a container needs
-neither.
+Serverless breaks that assumption in two places at once — per-instance memory and
+per-invocation lifetime — and `DATABASE_URL` repairs both.
+
+`PostgresStore` implements `ArenaStore` with no other layer aware of the swap, so the
+leaderboard, match history, permalinks, ownership and votes become shared and durable.
+The event bus needed no Redis driver in the end: the engine mirrors events into the store
+as they are emitted, and the SSE route follows a match it is not running by reading that
+trace forward from a cursor. One store, two readers, no second piece of infrastructure.
+`test/store.test.ts` runs the same conformance suite against both drivers, because a
+second implementation is only safe if it is indistinguishable through the interface.
+
+What remains serverless-only is the function duration cap, which can truncate a long
+model-driven match on the streaming path.
+
+### Identity
+
+`proxy.ts` — the `proxy.js` convention that replaced `middleware.js` in Next.js 16 —
+gives every visitor an unguessable id in an `httpOnly` cookie, forwarded on the request
+so the first render sees it before the cookie exists. The id is the credential, so there
+is no password to store and nothing to leak in a dump.
+
+Minting happens there; *authorization* does not. Route handlers that mutate an agent check
+ownership themselves, because a matcher change or a moved route would silently remove
+proxy coverage and take the only check with it. Before this existed every agent was
+created under one shared constant, which meant any visitor could edit or delete any
+other visitor's work.
 
 ## 8. Data model
 

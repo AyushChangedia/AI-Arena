@@ -27,21 +27,21 @@ That is the whole setup. No API key, no database, no container. Open
 **<https://ai-agent-arena-app.vercel.app>** — deployed from `main`, redeployed on every
 push.
 
-That instance is on Vercel, which is serverless, so treat its leaderboard as a showcase
-rather than a record: the store is per instance and does not survive a cold start
-([why](#on-serverless-vercel)). Matches themselves run in full — the sandbox, the tools
-and the graders do not care where they execute.
+Matches run in full there — real sandbox, real tools, real graders. Results accumulate
+only if that deployment has a `DATABASE_URL`; without one, serverless gives each instance
+its own memory and the leaderboard resets on a cold start
+([detail](#on-serverless-vercel)).
 
-To keep results, run it locally or put it on a container host, which is the shape the
-architecture actually assumes:
+Deploy your own with everything switched on:
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AyushChangedia/AI-Arena)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
 
-Render reads [`render.yaml`](render.yaml) and gives the app the persistent disk and
-single long-lived process it is designed around; see [Deploying](#deploying) for the
-Docker route and the Fly and Railway configs. Neither button needs configuring — the
-public origin used for canonical tags and Open Graph is detected from the platform.
+**Render is one click and nothing else.** [`render.yaml`](render.yaml) provisions the
+Postgres alongside the web service and wires `DATABASE_URL` into it, so persistence,
+shared state, ownership and votes all work on the first deploy with nothing to configure.
+Vercel builds with no configuration too — add a `DATABASE_URL` from any Postgres (Neon,
+Supabase, Railway) in the project's environment variables and it is equally complete.
 
 Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
 deterministic policies in place of a model. Every match is labelled `DEMO`. See
@@ -148,6 +148,12 @@ destroying history.
 A dimension that cannot be measured is reported and its weight redistributed — never
 silently scored zero. See [`docs/EVALUATION.md`](docs/EVALUATION.md).
 
+**Human preference is recorded separately and carries no weight.** Every finished match
+takes one vote per viewer on which agent you would rather have shipped it. The score is a
+measurement of what the agents did; folding opinion into it would make the number mean
+two things at once. Kept side by side, a crowd that disagrees with the graders is a
+signal about the task or the rubric — averaging them would hide exactly that.
+
 ## Agent leaderboard and Elo ratings
 
 Ranked **agents**, not vendors. A rating belongs to a configuration — this prompt, these
@@ -197,7 +203,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 240 tests
+npm test           # 262 tests (273 with a database)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order
@@ -206,6 +212,13 @@ npm run check      # all four, in order
 `node seed-matches.mjs` runs a spread of real matches against a running server, so the
 leaderboard and profiles have genuine data to render. Set `ARENA_URL` if it is not on
 port 3000.
+
+The Postgres half of the store conformance suite is skipped unless you point it at a
+database, so it never silently tests nothing:
+
+```bash
+TEST_DATABASE_URL=postgres://user:pass@localhost:5432/arena_test npm test
+```
 
 ## Deploying
 
@@ -231,34 +244,57 @@ hard process kill and restart against the same volume.
 ### On serverless (Vercel)
 
 It deploys and builds with no configuration, and the app is just as fast — a demo match
-is ~200 ms of real sandbox work. Running a match works there: the arena creates, runs,
-grades and returns the whole match in **one** request, then plays the recorded events
-back. Nothing in the run depends on the next request reaching the same instance.
+is ~200 ms of real sandbox work. Running a match works regardless: the arena creates,
+runs, grades and returns the whole match in **one** request, then plays the recorded
+events back, so nothing in the run depends on the next request reaching the same instance.
 
-What serverless still costs you:
+Everything that *accumulates* depends on `DATABASE_URL`:
 
-| | Consequence |
-|---|---|
-| Store is per instance | Matches, agents and ratings do not survive a cold start or a second instance, so the leaderboard reads empty and permalinks to past matches expire |
-| Function duration cap | Long *live* (model-driven) matches use the streaming path and can be truncated; demo matches are unaffected |
+| | Without it | With it |
+|---|---|---|
+| Leaderboard, history, permalinks | Per instance; empty after a cold start | Durable and shared |
+| Agent ownership | Per instance, so your agents vanish with the lambda | Durable |
+| Following a live match from another instance | Not possible | Works — events are mirrored to the store as they happen |
 
-The store writes to `/tmp` there automatically, which helps within a warm instance and
-nothing beyond it. Making serverless genuinely correct means a Postgres driver behind
-`ArenaStore` and a Redis driver behind `EventBus` — which is precisely why those are
-interfaces, and precisely why a container is the better answer for anything you want to
-keep.
+The one remaining serverless-only caveat is the function duration cap: long *live*
+(model-driven) matches use the streaming path and can be truncated. Demo matches are
+unaffected.
+
+## Storage
+
+Two drivers behind one interface, chosen by a single environment variable.
+
+| | Without `DATABASE_URL` | With `DATABASE_URL` |
+|---|---|---|
+| Driver | File-backed, atomic snapshots | Postgres |
+| Setup | None | A connection string; the schema builds itself on first connect |
+| Survives a restart | Yes, with a mounted disk | Yes |
+| Shared across instances | No | Yes |
+| Right for | Local use and a single container | Serverless, or more than one instance |
+
+Both pass the same conformance suite in `test/store.test.ts` — written once and run
+against each driver, because a second implementation is only safe if it is
+indistinguishable from the first through the interface. `/system` reports which one is
+live and whether its state is shared.
+
+## Accounts and ownership
+
+Every visitor gets an unguessable id in an `httpOnly` cookie. The id *is* the
+credential, like a session token, so there is no password to store and nothing to leak
+in a database dump. You can edit and delete the agents you built; nobody else can, and
+the seeded roster is immutable to everyone.
+
+This is authorization, not accounts: it answers "is this the same browser", not "who is
+this person". Clearing cookies means starting over, and there is no recovery. Swapping in
+real accounts later means changing what `viewerId()` returns and nothing else.
 
 ## Deliberately not built
 
-A stub that looks finished is worse than an absence, so none of these appear anywhere in
-the interface:
+A stub that looks finished is worse than an absence, so this does not appear in the
+interface:
 
-- **Authentication.** The data model carries an owner id; there is no login and no
-  half-built sign-in screen.
-- **Multi-instance realtime.** The event bus is in-process. Its interface is ready for a
-  Redis driver; the driver is not written.
-- **Human preference voting.** Specified in the evaluation docs, contributes no weight,
-  not implemented.
+- **Named accounts.** No email, no password, no OAuth, and no half-built sign-in screen.
+  Ownership is per-browser, as above.
 
 ## Stack
 

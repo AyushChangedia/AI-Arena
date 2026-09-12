@@ -165,9 +165,48 @@ async function execute(matchId: string): Promise<Match> {
   const nextSeq = () => seq++;
   const allEvents: ExecutionEvent[] = [];
 
+  // Events are mirrored into the store as the match runs, not only at the end.
+  // The in-process bus only reaches subscribers on this instance, so without
+  // this a browser following the match from another instance would watch a
+  // blank arena until the whole thing finished. Batched behind a short debounce
+  // because a write per event would be one round trip per tool call.
+  let pendingPersist: ExecutionEvent[] = [];
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  let persisting: Promise<void> = Promise.resolve();
+
+  const drainPersist = () => {
+    if (pendingPersist.length === 0) return;
+    const batch = pendingPersist;
+    pendingPersist = [];
+    persisting = persisting
+      .then(() => store.saveEvents(matchId, batch))
+      // A mirror failure must never take down the match it is mirroring; the
+      // authoritative write still happens when the run ends.
+      .catch((error) => console.error(`[arena] event mirror failed for ${matchId}:`, error));
+  };
+
   const emit = (event: ExecutionEvent) => {
     allEvents.push(event);
     bus.publish(topic, event);
+
+    pendingPersist.push(event);
+    if (!persistTimer) {
+      persistTimer = setTimeout(() => {
+        persistTimer = null;
+        drainPersist();
+      }, 250);
+      persistTimer.unref?.();
+    }
+  };
+
+  /** Stop mirroring and let any in-flight write settle before the final save. */
+  const settlePersist = async () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    drainPersist();
+    await persisting;
   };
 
   const emitMatchEvent = (
@@ -388,6 +427,7 @@ async function execute(matchId: string): Promise<Match> {
       durationMs: Date.now() - startedAt,
     };
     await store.updateMatch(match);
+    await settlePersist();
     await store.saveEvents(matchId, allEvents);
     await store.flush();
     return match;
@@ -402,6 +442,7 @@ async function execute(matchId: string): Promise<Match> {
       durationMs: Date.now() - startedAt,
     };
     await store.updateMatch(match);
+    await settlePersist();
     await store.saveEvents(matchId, allEvents);
     await store.flush();
     return match;

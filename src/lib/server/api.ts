@@ -9,6 +9,7 @@ export function ok<T>(data: T, init?: ResponseInit): NextResponse {
 
 export type ApiErrorCode =
   | "bad_request"
+  | "forbidden"
   | "not_found"
   | "conflict"
   | "rate_limited"
@@ -17,6 +18,7 @@ export type ApiErrorCode =
 
 const STATUS: Record<ApiErrorCode, number> = {
   bad_request: 400,
+  forbidden: 403,
   not_found: 404,
   conflict: 409,
   rate_limited: 429,

@@ -4,6 +4,7 @@ import { updateAgentSchema } from "@/lib/agents/schema";
 import { fail, guard, ok, parseBody } from "@/lib/server/api";
 import { getAgentProfile } from "@/lib/server/queries";
 import { hashOf, id } from "@/lib/arena/ids";
+import { owns, viewerId } from "@/lib/server/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!agent) return fail("not_found", `No agent with id "${agentId}".`);
     if (agent.origin === "seed") {
       return fail("conflict", "Seed agents are immutable — duplicate one into your own agent to change it.");
+    }
+    if (!owns(agent.ownerId, await viewerId())) {
+      return fail("forbidden", "This agent belongs to someone else. Build your own to edit it.");
     }
 
     const { data, error } = await parseBody(request, updateAgentSchema);
@@ -66,6 +70,9 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     if (!agent) return fail("not_found", `No agent with id "${agentId}".`);
     if (agent.origin === "seed") {
       return fail("conflict", "Seed agents cannot be deleted — they are the arena's baseline roster.");
+    }
+    if (!owns(agent.ownerId, await viewerId())) {
+      return fail("forbidden", "This agent belongs to someone else.");
     }
     await store.deleteAgent(agentId);
     await store.flush();

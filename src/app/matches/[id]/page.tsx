@@ -5,6 +5,7 @@ import { ArtifactViewer } from "@/components/arena/ArtifactViewer";
 import { ReplayPlayer } from "@/components/arena/ReplayPlayer";
 import { DimensionTable } from "@/components/arena/ResultReveal";
 import { ShareCard } from "@/components/matches/ShareCard";
+import { VotePanel } from "@/components/matches/VotePanel";
 import {
   Chip,
   Emblem,
@@ -20,6 +21,8 @@ import {
   fmtUsd,
 } from "@/components/ui/primitives";
 import { getMatchDetail, getReplay } from "@/lib/server/queries";
+import { getVoteStore } from "@/lib/store";
+import { viewerId } from "@/lib/server/identity";
 import type { AgentSideDetail } from "@/lib/server/queries";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +42,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function MatchDetailPage({ params }: Props) {
   const { id } = await params;
-  const [detail, replay] = await Promise.all([getMatchDetail(id), getReplay(id)]);
+  const [detail, replay, viewer] = await Promise.all([getMatchDetail(id), getReplay(id), viewerId()]);
   if (!detail) notFound();
+
+  const votes = await (await getVoteStore()).getVotes(id, viewer ?? undefined);
 
   const { match, task, sides, winner, loser, whyWon } = detail;
   const [a, b] = sides;
@@ -300,6 +305,13 @@ export default async function MatchDetailPage({ params }: Props) {
           </div>
         </div>
       ) : null}
+
+      <VotePanel
+        matchId={match.id}
+        names={{ A: a.configSnapshot.name, B: b.configSnapshot.name }}
+        initial={votes}
+        verdict={match.result === "A" || match.result === "B" ? match.result : match.result === "draw" ? "draw" : null}
+      />
 
       {/* share */}
       <div className="mt-12">

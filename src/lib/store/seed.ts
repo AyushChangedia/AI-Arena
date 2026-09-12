@@ -27,7 +27,7 @@ const ALL_TOOLS = ["file.read", "file.write", "file.list", "file.delete", "shell
 const BUILD_TOOLS = ["file.read", "file.write", "file.list", "shell.exec", "code.run"];
 const RESEARCH_TOOLS = ["web.search", "web.fetch", "file.read", "file.write", "file.list"];
 
-const SEED_CONFIGS: AgentConfig[] = [
+export const SEED_CONFIGS: AgentConfig[] = [
   {
     name: "The Architect",
     handle: "architect",

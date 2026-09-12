@@ -9,6 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const HEARTBEAT_MS = 15_000;
+/** How often to re-read the store when the match is running elsewhere. */
+const POLL_MS = 500;
 
 /**
  * Server-sent events for one match.
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     let unsubscribe: (() => void) | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           closed = true;
           unsubscribe?.();
           if (heartbeat) clearInterval(heartbeat);
+          if (poll) clearInterval(poll);
           try {
             controller.close();
           } catch {
@@ -84,10 +88,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           resumedFrom: lastSeq,
         });
 
-        for (const event of history) {
-          if (event.seq <= lastSeq) continue;
+        // One gate for both sources. The local bus and the store poll can both
+        // deliver the same event, and a replayed duplicate would be counted
+        // twice by every panel downstream.
+        let highest = lastSeq;
+        const forward = (event: ExecutionEvent) => {
+          if (event.seq <= highest) return;
+          highest = event.seq;
           send("arena", event, event.seq);
-        }
+        };
+
+        for (const event of history) forward(event);
 
         // Nothing more is coming for a finished match, so close rather than
         // holding a connection open forever.
@@ -103,9 +114,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             close();
             return;
           }
-          if (event.seq <= lastSeq) return;
-          send("arena", event, event.seq);
+          forward(event);
         });
+
+        // The match may be running on a different instance, whose in-process
+        // bus this one cannot see. The engine mirrors events into the store as
+        // they happen, so follow it from there instead of holding open a
+        // connection that would never deliver anything.
+        if (!isRunning(id)) {
+          poll = setInterval(() => {
+            if (closed) return;
+            void (async () => {
+              try {
+                for (const event of await store.getEvents(id)) forward(event);
+                const current = await store.getMatch(id);
+                if (current && (current.status === "complete" || current.status === "failed")) {
+                  send("end", { matchId: id, status: current.status });
+                  close();
+                }
+              } catch (error) {
+                console.error(`[arena] follow failed for ${id}:`, error);
+              }
+            })();
+          }, POLL_MS);
+          poll.unref?.();
+        }
 
         heartbeat = setInterval(() => {
           if (closed) return;
@@ -123,6 +156,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       cancel() {
         unsubscribe?.();
         if (heartbeat) clearInterval(heartbeat);
+        if (poll) clearInterval(poll);
       },
     });
 

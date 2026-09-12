@@ -28,10 +28,17 @@ export async function GET() {
       },
       search: { id: search.id, label: search.label, provenance: search.provenance },
       persistence: {
-        driver: "file",
+        driver: store.driver,
         persistent: store.persistent,
+        // Whether a second instance sees the same data — the difference that
+        // decides if the leaderboard is a record or just this process's memory.
+        shared: store.shared,
         location: store.location,
-        note: store.persistent ? undefined : "Snapshots are not reaching disk; this process is memory-only.",
+        note: !store.persistent
+          ? "Snapshots are not reaching disk; this process is memory-only."
+          : store.shared
+            ? undefined
+            : "Single-process storage. Set DATABASE_URL to share state across instances and survive restarts.",
       },
       catalogue: { tasks: allTasks().length, tools: allTools().length },
       stats,

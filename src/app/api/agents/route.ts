@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getStore } from "@/lib/store";
-import { OWNER_ID } from "@/lib/store/seed";
+import { viewerId } from "@/lib/server/identity";
 import { createAgentSchema } from "@/lib/agents/schema";
 import { fail, guard, ok, parseBody } from "@/lib/server/api";
 import { clientKey, rateLimit } from "@/lib/server/rate-limit";
@@ -28,6 +28,13 @@ export async function POST(request: NextRequest) {
       return fail("rate_limited", `Too many agents created. Try again in ${Math.ceil(limited.resetInMs / 1000)}s.`);
     }
 
+    // Established before anything is written: an agent nobody owns can be
+    // edited or deleted by anybody.
+    const owner = await viewerId();
+    if (!owner) {
+      return fail("forbidden", "Could not identify this browser. Enable cookies and try again.");
+    }
+
     const { data, error } = await parseBody(request, createAgentSchema);
     if (error) return error;
 
@@ -41,7 +48,7 @@ export async function POST(request: NextRequest) {
     const now = Date.now();
     const agent: Agent = {
       id: id("agent"),
-      ownerId: OWNER_ID,
+      ownerId: owner,
       visibility: data.visibility,
       config,
       configHash: hashOf(config),
