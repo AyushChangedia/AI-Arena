@@ -56,7 +56,15 @@ export interface ProviderTurn {
 export class ProviderError extends Error {
   constructor(
     message: string,
-    readonly kind: "not_configured" | "auth" | "rate_limit" | "network" | "bad_response" | "aborted",
+    readonly kind:
+      | "not_configured"
+      | "auth"
+      | "rate_limit"
+      /** The model itself is gone or not served — distinct from the key being wrong. */
+      | "unavailable"
+      | "network"
+      | "bad_response"
+      | "aborted",
     readonly retryable = false,
   ) {
     super(message);
@@ -172,6 +180,15 @@ export async function postJson(
     const detail = text.slice(0, 400);
     if (res.status === 401 || res.status === 403) {
       throw new ProviderError(`${label} rejected the API key (${res.status})`, "auth");
+    }
+    if (res.status === 402) {
+      throw new ProviderError(`${label} requires credits for this model (402). ${detail}`, "auth");
+    }
+    if (res.status === 404) {
+      // A free model that has been retired or renamed lands here. It is not a
+      // broken key and not a network fault, and saying so is the difference
+      // between "swap the model" and "check your account".
+      throw new ProviderError(`${label} does not serve this model (404). ${detail}`, "unavailable");
     }
     if (res.status === 429) {
       throw new ProviderError(`${label} rate limited (429). ${detail}`, "rate_limit", true);

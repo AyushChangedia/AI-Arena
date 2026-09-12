@@ -1,5 +1,6 @@
 import type { ProviderId } from "@/lib/arena/types";
 import type { ModelProvider } from "./types";
+import { OpenRouterProvider } from "./openrouter";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAIProvider } from "./openai";
 import { GoogleProvider } from "./google";
@@ -12,7 +13,15 @@ import { GoogleProvider } from "./google";
 let cache: Map<ProviderId, ModelProvider> | null = null;
 
 function build(): Map<ProviderId, ModelProvider> {
-  const list: ModelProvider[] = [new AnthropicProvider(), new OpenAIProvider(), new GoogleProvider()];
+  // OpenRouter first: one key, free models, and the only one the arena needs to
+  // run live. The direct vendor adapters stay available for anyone who has those
+  // keys, and simply report NOT CONFIGURED when they do not.
+  const list: ModelProvider[] = [
+    new OpenRouterProvider(),
+    new AnthropicProvider(),
+    new OpenAIProvider(),
+    new GoogleProvider(),
+  ];
   return new Map(list.map((p) => [p.id, p]));
 }
 
@@ -35,6 +44,7 @@ export interface ProviderStatus {
 }
 
 const ENV_VARS: Record<string, string> = {
+  openrouter: "OPENROUTER_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GOOGLE_API_KEY",

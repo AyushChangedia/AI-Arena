@@ -189,10 +189,10 @@ export async function runAgent(opts: HarnessOptions): Promise<HarnessResult> {
     } catch (e) {
       const pe = e instanceof ProviderError ? e : null;
       error = e instanceof Error ? e.message : String(e);
-      emit("agent.task_failed", pe?.kind === "not_configured" ? "Provider not configured" : "Provider error", {
-        status: "error",
-        detail: error,
-      });
+      // The label is what a viewer reads on the agent panel, so it names the
+      // actual problem. "Model unavailable" and "Rate limited" are things the
+      // user can act on; "Provider error" is not.
+      emit("agent.task_failed", providerFailureLabel(pe), { status: "error", detail: error });
       setState("failed");
       outcome = pe?.kind === "aborted" ? "cancelled" : "provider_error";
       break;
@@ -559,4 +559,31 @@ function truncate(s: string, max: number): string {
 
 function fmtMs(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * A short, honest headline for a provider failure.
+ *
+ * A free-tier model that has been retired or is momentarily saturated is the
+ * most likely failure in a zero-cost setup, and it is not the same thing as a
+ * bad key or a bug. The match still completes and is still graded — the agent
+ * simply scores what it managed before the provider stopped answering.
+ */
+function providerFailureLabel(error: ProviderError | null): string {
+  switch (error?.kind) {
+    case "not_configured":
+      return "Provider not configured";
+    case "unavailable":
+      return "Model unavailable";
+    case "rate_limit":
+      return "Rate limited";
+    case "auth":
+      return "Provider rejected the key";
+    case "network":
+      return "Provider unreachable";
+    case "aborted":
+      return "Run cancelled";
+    default:
+      return "Provider error";
+  }
 }

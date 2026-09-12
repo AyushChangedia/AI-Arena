@@ -91,8 +91,27 @@ This is the section to read if you are evaluating whether the product is honest.
 
 Only one thing changes: **who decides the next action.**
 
-- **LIVE match** — a `ModelProvider` adapter calls Anthropic / OpenAI / Google over
-  HTTPS. Token usage and cost come back from the provider's own response.
+- **LIVE match** — a `ModelProvider` adapter calls the model over HTTPS. Token usage comes
+  back from the provider's own response; a `:free` OpenRouter model reports a cost of
+  exactly `$0.00`, and anything unpriced reports `—` rather than a guess.
+
+### Providers
+
+Four adapters behind one interface, all server-only. `OpenRouterProvider` is the default
+and the only one the arena needs: it speaks OpenAI's `/chat/completions` against
+OpenRouter, whose `:free` tier makes the whole seeded roster runnable without buying
+credits. `AnthropicProvider`, `OpenAIProvider` and `GoogleProvider` remain for anyone with
+those accounts, and report NOT CONFIGURED otherwise. None of them is required.
+
+Free models are promotional — added, renamed and retired without notice — so the model
+list is a default rather than a fact: `OPENROUTER_MODELS` replaces it without a redeploy,
+and a model that has gone away raises `ProviderError` of kind `unavailable`, distinct from
+a bad key or a network fault. The harness turns that into a **Model unavailable** label on
+the agent panel and grades the run on what it managed; a rate limit becomes **Rate
+limited** the same way. A provider failure ends one agent's run, never the match.
+
+Every task in the arena is driven by tool calls, so a model without tool-calling support
+cannot compete — it talks instead of acting. The shipped defaults are all tool-capable.
 - **DEMO match** — a `ScriptedProvider` plays a deterministic, seeded policy in place of
   the model. It emits genuine tool calls into the genuine harness. Everything in §4.1
   still happens for real; the *reasoning* is pre-authored rather than sampled.

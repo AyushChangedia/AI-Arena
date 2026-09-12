@@ -59,8 +59,16 @@ services:
           type: web
           property: host
 
-      # Set any one of these to promote DEMO matches to LIVE. A match runs live
-      # only when BOTH agents have a key for their provider.
+      # Promotes DEMO matches to LIVE. One key covers the whole seeded roster,
+      # which runs on OpenRouter's free models — no credits required.
+      # https://openrouter.ai/keys
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Optional: point at current free model ids if any have been retired.
+      - key: OPENROUTER_MODELS
+        sync: false
+
+      # Optional, and unused by default — only for direct vendor accounts.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: OPENAI_API_KEY

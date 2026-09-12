@@ -71,7 +71,7 @@ describe("secrets are never exposed to the client", () => {
   it("never reads a provider key outside a server-only module", () => {
     const offenders = SOURCES.filter((file) => {
       if (file.includes("agents/providers/")) return false;
-      return /process\.env\.(ANTHROPIC|OPENAI|GOOGLE|TAVILY)_API_KEY/.test(readFileSync(file, "utf8"));
+      return /process\.env\.(OPENROUTER|ANTHROPIC|OPENAI|GOOGLE|TAVILY)_API_KEY/.test(readFileSync(file, "utf8"));
     });
     expect(offenders).toEqual([]);
   });

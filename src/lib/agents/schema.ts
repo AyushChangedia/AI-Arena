@@ -30,7 +30,7 @@ export const agentConfigSchema = z.object({
   tagline: z.string().trim().max(LIMITS.tagline.max, "Keep the tagline short.").default(""),
   description: z.string().trim().max(LIMITS.description.max, "Keep the description under 400 characters.").default(""),
   model: z.object({
-    provider: z.enum(["anthropic", "openai", "google", "scripted"]),
+    provider: z.enum(["openrouter", "anthropic", "openai", "google", "scripted"]),
     model: z.string().trim().min(1, "Pick a model.").max(80),
     label: z.string().trim().min(1).max(60),
   }),

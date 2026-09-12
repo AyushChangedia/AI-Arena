@@ -10,6 +10,10 @@ import { hashOf } from "@/lib/arena/ids";
  * DEMO everywhere — it never claims the named model produced the run. Add a key
  * and the same agent runs live against the same tasks and graders.
  *
+ * All six run on OpenRouter's free tier, so a single OPENROUTER_API_KEY makes
+ * the whole roster live without buying credits. Six different models rather than
+ * six of one: the leaderboard is only interesting if the field is varied.
+ *
  * They are also not equally good, and they do not all win. The Speedrunner is
  * fast and careless and loses coding tasks it could have won; that is the point
  * of having a leaderboard at all.
@@ -35,7 +39,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "Explores the environment before touching it, then makes a single deliberate change. " +
       "Slow to start and hard to beat on tasks where the defect is not where it appears to be.",
-    model: { provider: "anthropic", model: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    model: { provider: "openrouter", model: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3 (free)" },
     systemPrompt:
       "You are a senior engineer who has been burned by hasty fixes. Read the code and the " +
       "tests before you change anything. Identify every defect, not just the first one. " +
@@ -56,7 +60,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "Goes straight at the deliverable and iterates from real feedback. Wins on breadth " +
       "tasks with a clear target; loses where the first obvious answer is the wrong one.",
-    model: { provider: "openai", model: "gpt-5", label: "GPT-5" },
+    model: { provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)" },
     systemPrompt:
       "You ship. Produce the deliverable first, then check it against the requirements and " +
       "fix what is actually wrong. Do not gold-plate. Do not explore for its own sake.",
@@ -76,7 +80,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "Searches widely, fetches in full, and refuses to write from snippets. Built for " +
       "source-heavy work; carries no advantage on a coding task.",
-    model: { provider: "google", model: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    model: { provider: "openrouter", model: "qwen/qwen-2.5-72b-instruct:free", label: "Qwen 2.5 72B (free)" },
     systemPrompt:
       "You are a research analyst. Search broadly, then fetch and read every document you " +
       "intend to cite — never write from a search snippet. Weigh sources by quality and say " +
@@ -97,7 +101,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "Runs the failing case before proposing a cause, and re-runs after every change. " +
       "Strong on repair work, middling where there is nothing to reproduce.",
-    model: { provider: "anthropic", model: "claude-opus-4-6", label: "Claude Opus 4.6" },
+    model: { provider: "openrouter", model: "deepseek/deepseek-r1-0528:free", label: "DeepSeek R1 (free)" },
     systemPrompt:
       "You debug by evidence. Run the failing case first and read the actual error. Form one " +
       "hypothesis, change one thing, re-run. If the error changes, you learned something; if " +
@@ -118,7 +122,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "Every tool, middling depth, no strong preferences. Rarely the best agent on a task " +
       "and rarely the worst — the baseline the specialists are measured against.",
-    model: { provider: "openai", model: "gpt-4.1", label: "GPT-4.1" },
+    model: { provider: "openrouter", model: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1 (free)" },
     systemPrompt:
       "You handle whatever the task is. Read enough to understand the requirements, make a " +
       "plan proportional to the difficulty, execute it, and verify the result before stopping.",
@@ -138,7 +142,7 @@ export const SEED_CONFIGS: AgentConfig[] = [
     description:
       "A hard ten-step ceiling and no exploration. Posts the best efficiency numbers in the " +
       "arena and loses matches it should have won by skipping the verification step.",
-    model: { provider: "google", model: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    model: { provider: "openrouter", model: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (free)" },
     systemPrompt:
       "You optimise for steps. Do not read what you can infer. Do not verify what is " +
       "obviously right. Produce the deliverable in as few tool calls as possible.",
@@ -176,7 +180,10 @@ export async function seedIfEmpty(store: ArenaStore): Promise<void> {
   if (seasons.length === 0) await store.saveSeason(SEASON_ONE);
 
   const existing = await store.listAgents();
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    await reconcileSeedAgents(store, existing);
+    return;
+  }
 
   const now = Date.now();
   for (const [index, config] of SEED_CONFIGS.entries()) {
@@ -199,6 +206,57 @@ export async function seedIfEmpty(store: ArenaStore): Promise<void> {
       config,
       configHash: agent.configHash,
       createdAt: agent.createdAt,
+    });
+  }
+}
+
+/**
+ * Bring already-stored seed agents back in line with the shipped roster.
+ *
+ * Seeding only runs on an empty store, so a database created before a roster
+ * change keeps the old configuration forever. That is how a deployment ends up
+ * with agents pinned to a provider whose key nobody has — they would sit in DEMO
+ * permanently while the arena insisted a key was configured.
+ *
+ * Only `origin: "seed"` agents are touched, so nothing anyone built is rewritten.
+ * Past matches are unaffected either way: every match pins the config snapshot
+ * and hash it actually ran, which is the whole reason those are stored.
+ */
+async function reconcileSeedAgents(store: ArenaStore, existing: Agent[]): Promise<void> {
+  const byHandle = new Map(existing.map((a) => [a.config.handle, a]));
+
+  for (const config of SEED_CONFIGS) {
+    const current = byHandle.get(config.handle);
+    if (!current) {
+      // A roster addition: create it rather than leaving the field short.
+      const now = Date.now();
+      await store.createAgent({
+        id: `agent_${config.handle}`,
+        ownerId: OWNER_ID,
+        visibility: "public",
+        config,
+        configHash: hashOf(config),
+        createdAt: now,
+        updatedAt: now,
+        origin: "seed",
+      });
+      continue;
+    }
+    if (current.origin !== "seed") continue;
+
+    const hash = hashOf(config);
+    if (current.configHash === hash) continue;
+
+    const versions = await store.listAgentVersions(current.id);
+    const next = (versions[0]?.version ?? 1) + 1;
+    await store.updateAgent({ ...current, config, configHash: hash, updatedAt: Date.now() });
+    await store.createAgentVersion({
+      id: `ver_${config.handle}_${next}`,
+      agentId: current.id,
+      version: next,
+      config,
+      configHash: hash,
+      createdAt: Date.now(),
     });
   }
 }

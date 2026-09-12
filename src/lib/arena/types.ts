@@ -12,7 +12,7 @@ export type Side = "A" | "B";
 
 // ─── Providers & models ──────────────────────────────────────────────────────
 
-export type ProviderId = "anthropic" | "openai" | "google" | "scripted";
+export type ProviderId = "openrouter" | "anthropic" | "openai" | "google" | "scripted";
 
 /** How a match was driven. The single most important honesty flag in the app. */
 export type ExecutionMode =

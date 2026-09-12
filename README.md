@@ -93,8 +93,8 @@ The part worth reading before you trust a number on the screen.
 
 **The one thing an API key changes** is who decides the next action.
 
-- **LIVE** — a provider adapter calls Anthropic, OpenAI or Google. Token counts and cost
-  come from the provider's own response.
+- **LIVE** — a provider adapter calls the model over OpenRouter (or a vendor directly).
+  Token counts come from the provider's own response, and a free model's cost is `$0.00`.
 - **DEMO** — a deterministic scripted policy plays in place of the model. It emits real
   tool calls into the real harness; everything in the table above still happens for real.
   The *reasoning* is pre-authored rather than sampled.
@@ -110,19 +110,45 @@ isolation boundary. It is right for the arena's own task code; running genuinely
 code needs out-of-process isolation. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 §4.3, and `/system` in the running app, which reports exactly what is configured.
 
-## Going live with Claude, GPT or Gemini
+## Going live — free, on one key
 
-Copy `.env.example` to `.env.local` and set any one key:
+Real models, no credits. Every seeded agent runs on an OpenRouter `:free` model, so a
+single key promotes the whole roster from DEMO to LIVE:
 
 ```bash
-ANTHROPIC_API_KEY=...   # Claude
-OPENAI_API_KEY=...      # GPT
-GOOGLE_API_KEY=...      # Gemini
+OPENROUTER_API_KEY=...  # https://openrouter.ai/keys — free tier, no card
 TAVILY_API_KEY=...      # optional: live web search instead of the bundled corpus
 ```
 
-Agents configured for a connected provider run live against the same tasks and the same
-graders. Nothing else changes. Adding a fourth vendor is one file implementing
+| Agent | Model |
+|---|---|
+| The Architect | `deepseek/deepseek-chat-v3-0324:free` |
+| The Shipper | `meta-llama/llama-3.3-70b-instruct:free` |
+| Research Beast | `qwen/qwen-2.5-72b-instruct:free` |
+| The Debugger | `deepseek/deepseek-r1-0528:free` |
+| The Generalist | `mistralai/mistral-small-3.1-24b-instruct:free` |
+| The Speedrunner | `google/gemini-2.0-flash-exp:free` |
+
+Six different models rather than six of one — a leaderboard is only interesting if the
+field is varied. Free matches report **cost `$0.00`**, which is measured rather than
+assumed: the `:free` suffix is what makes OpenRouter bill nothing.
+
+**What the free tier costs you instead.** Requests are capped per minute and per day, and
+free model ids are promotional — they get renamed and retired without notice. Neither
+crashes a match: the agent panel shows **Rate limited** or **Model unavailable**, the run
+is graded on what it managed, and the match completes. Point at current ids without
+redeploying:
+
+```bash
+OPENROUTER_MODELS="vendor/model:free|Nice Label, vendor/other:free"
+```
+
+Every model in the arena needs **tool calling** — a model that cannot call tools will talk
+instead of acting and score near zero on a task it never attempted. The defaults are all
+tool-capable; keep that in mind if you override them.
+
+Direct `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GOOGLE_API_KEY` still work if you happen
+to have them, and are never required. Adding a vendor is one file implementing
 `ModelProvider`.
 
 ## The task library
@@ -240,7 +266,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 275 tests (286 with a database)
+npm test           # 295 tests (306 with a database)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order

@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { createMatch, startMatch, resolveMode } from "@/lib/arena/engine";
 import { getStore } from "@/lib/store";
+import { SEED_CONFIGS } from "@/lib/store/seed";
 import { getMatchDetail } from "@/lib/server/queries";
 import { eventBus, topicFor, isTerminator } from "@/lib/arena/events";
 import { allTasks } from "@/lib/tasks";
@@ -209,8 +210,37 @@ describe("mode resolution", () => {
   it("falls back to demo when the declared provider has no key", async () => {
     const store = await getStore();
     const architect = await store.getAgentByHandle("architect");
-    // No ANTHROPIC_API_KEY in the test environment.
+    // No OPENROUTER_API_KEY in the test environment.
     expect(resolveMode(architect!.config)).toBe("demo");
+  });
+
+  it("puts the whole seeded roster on one key", async () => {
+    // The point of routing through OpenRouter: a single free key promotes every
+    // seeded agent, so nobody needs an account with any model vendor.
+    const store = await getStore();
+    const agents = await Promise.all(
+      SEED_CONFIGS.map((c) => store.getAgentByHandle(c.handle)),
+    );
+    expect(agents.every(Boolean)).toBe(true);
+    for (const agent of agents) {
+      expect(agent!.config.model.provider, agent!.config.name).toBe("openrouter");
+      // `:free` is what makes OpenRouter bill nothing for it.
+      expect(agent!.config.model.model, agent!.config.name).toMatch(/:free$/);
+    }
+    // Varied field, not six of the same model.
+    expect(new Set(agents.map((a) => a!.config.model.model)).size).toBe(SEED_CONFIGS.length);
+  });
+
+  it("requires no vendor key anywhere in the shipped configuration", () => {
+    // Anthropic, OpenAI and Google adapters still exist for anyone who has
+    // those accounts. Nothing in the default setup may depend on them.
+    for (const file of ["render.yaml", ".env.example"]) {
+      const text = readFileSync(file, "utf8");
+      for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"]) {
+        if (!text.includes(key)) continue;
+        expect(text, `${file} must mark ${key} optional`).toMatch(/optional/i);
+      }
+    }
   });
 });
 
