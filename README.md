@@ -24,10 +24,24 @@ That is the whole setup. No API key, no database, no container. Open
 
 ## Live demo
 
-Run it locally with the two commands above, or deploy your own — see
-[Deploying](#deploying). Either way it runs in demo mode out of the box: real sandbox,
-real tools, real graders, deterministic policies in place of a model. Every match is
-labelled `DEMO`. See [What is real, and what is not](#what-is-real-and-what-is-not).
+There is no public hosted instance. Run it locally — two commands, no key, no database —
+or put it on a host of your own in one click:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AyushChangedia/AI-Arena)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
+
+Render is the one to use: it reads [`render.yaml`](render.yaml) and gives the app the
+persistent disk and single long-lived process it is designed around. Vercel builds with
+no configuration and is just as fast per match, but it is serverless — read
+[the caveats](#on-serverless-vercel) before you judge the leaderboard by it.
+
+> **This repository is private**, so both buttons resolve only for an account that can
+> already read it. Making it public turns them into working links for anyone; no code
+> changes. See [Deploying](#deploying) for the container route and Fly/Railway configs.
+
+Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
+deterministic policies in place of a model. Every match is labelled `DEMO`. See
+[What is real, and what is not](#what-is-real-and-what-is-not).
 
 ## Why an agent benchmark, and not another LLM leaderboard
 
