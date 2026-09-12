@@ -142,7 +142,25 @@ POST /api/matches/:id/start       run
    └─ persist Match + Execution + Events + Artifacts + Evaluation + Score
 GET  /api/matches/:id/events      SSE, replays the buffer then streams live
 GET  /api/matches/:id/replay      the persisted trace, for scrubbing
+
+POST /api/matches/run             create + run + grade + return, in one request
 ```
+
+Two ways to watch a match, and the difference is where the state has to live.
+
+The **streaming** path — create, open the SSE stream, start, follow — needs four requests
+to agree on which process is holding the match. That is free on one long-lived process
+and impossible on a serverless host, where each request may be served by a different
+instance and the match exists only in the one that created it. The symptom was the arena
+page 404ing the instant you pressed start.
+
+The **single-request** path (`POST /api/matches/run`) removes the shared state from the
+critical path rather than trying to synchronise it. One request creates, runs, grades and
+returns the match with its recorded events; the client paces them for readability exactly
+as it paces a live stream. Nothing about the execution differs — same engine, sandbox,
+tools and graders, and the events carry the timings the harness measured. It is what the
+lobby uses for scripted matches, which finish in ~200ms. A model-driven match is unbounded
+in a way a request is not, so the endpoint declines it and says to use the stream.
 
 ### Fairness invariants (enforced, and unit-tested in `test/fairness.test.ts`)
 
@@ -189,9 +207,11 @@ describe exactly that: a single container with a volume at `/data` and a health 
 at `/api/health`.
 
 Serverless breaks the assumption in two places at once — per-instance memory and
-per-invocation lifetime — so a deployment there loses state on cold start and can drop a
-live stream that lands on the wrong instance. Two drivers fix it (Postgres behind
-`ArenaStore`, Redis behind `EventBus`) and neither is written, because a container needs
+per-invocation lifetime. Running a match survives that, because the single-request path
+above needs no shared state at all. What does not survive is everything meant to
+accumulate: the leaderboard, the match history, and permalinks to past matches all read
+empty once the instance that produced them is gone. Two drivers fix that (Postgres behind
+`ArenaStore`, Redis behind `EventBus`); neither is written, because a container needs
 neither.
 
 ## 8. Data model

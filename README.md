@@ -197,7 +197,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 239 tests
+npm test           # 240 tests
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order
@@ -231,19 +231,22 @@ hard process kill and restart against the same volume.
 ### On serverless (Vercel)
 
 It deploys and builds with no configuration, and the app is just as fast — a demo match
-is ~200 ms of real sandbox work. But serverless splits apart the two things this design
-keeps together:
+is ~200 ms of real sandbox work. Running a match works there: the arena creates, runs,
+grades and returns the whole match in **one** request, then plays the recorded events
+back. Nothing in the run depends on the next request reaching the same instance.
+
+What serverless still costs you:
 
 | | Consequence |
 |---|---|
-| Store is per instance | Matches, agents and ratings do not survive a cold start or a second instance |
-| Event bus is in process | The live arena can come up blank if the SSE connection lands on a different instance than the run |
-| Function duration cap | Long *live* (model-driven) matches can be truncated; demo matches are unaffected |
+| Store is per instance | Matches, agents and ratings do not survive a cold start or a second instance, so the leaderboard reads empty and permalinks to past matches expire |
+| Function duration cap | Long *live* (model-driven) matches use the streaming path and can be truncated; demo matches are unaffected |
 
 The store writes to `/tmp` there automatically, which helps within a warm instance and
 nothing beyond it. Making serverless genuinely correct means a Postgres driver behind
 `ArenaStore` and a Redis driver behind `EventBus` — which is precisely why those are
-interfaces, and precisely why a container is the better answer today.
+interfaces, and precisely why a container is the better answer for anything you want to
+keep.
 
 ## Deliberately not built
 

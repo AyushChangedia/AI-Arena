@@ -43,7 +43,9 @@ export function Ignition() {
     <div ref={ref} className="relative">
       <ArenaField active={inView || Boolean(reduced)} ready={ready} reduced={Boolean(reduced)} />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-3">
+      {/* In flow, not overlaid: the diagram now fills its viewBox, so there is
+          no empty margin left to sit in without covering the agent labels. */}
+      <div className="pointer-events-none mt-4 flex justify-center">
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4">
           {BOOT_LINES.map((line, index) => {
             const shown = index < stage;
@@ -83,8 +85,8 @@ function ArenaField({ active, ready, reduced }: { active: boolean; ready: boolea
 
   return (
     <svg
-      viewBox="0 0 900 320"
-      className="h-[240px] w-full sm:h-[300px]"
+      viewBox="88 38 724 212"
+      className="block h-auto w-full"
       role="img"
       aria-label="Two agents connected to one shared environment running one task"
     >
@@ -137,7 +139,7 @@ function ArenaField({ active, ready, reduced }: { active: boolean; ready: boolea
       >
         <rect x="400" y="110" width="100" height="100" fill="#0f1216" stroke="#2b333c" />
         <rect x="400" y="110" width="100" height="16" fill="#14181d" stroke="#2b333c" />
-        <text x="450" y="122" textAnchor="middle" className="fill-dim" fontSize="8" fontFamily="var(--font-jetbrains)" letterSpacing="1.4">
+        <text x="450" y="123" textAnchor="middle" className="fill-mid" fontSize="13" fontFamily="var(--font-jetbrains)" letterSpacing="1.4">
           ENV
         </text>
         {[0, 1, 2, 3].map((i) => (
@@ -147,7 +149,7 @@ function ArenaField({ active, ready, reduced }: { active: boolean; ready: boolea
             y={140 + i * 14}
             width={i === 3 ? 40 : 72}
             height="5"
-            fill="#2b333c"
+            fill="#3d4854"
             initial={{ scaleX: 0 }}
             animate={active ? { scaleX: 1 } : { scaleX: 0 }}
             style={{ transformOrigin: "414px 0px" }}
@@ -169,10 +171,10 @@ function ArenaField({ active, ready, reduced }: { active: boolean; ready: boolea
         transition={{ duration: t.node, delay: reduced ? 0 : 1.0 }}
       >
         <line x1="450" y1="86" x2="450" y2="108" stroke="#2b333c" strokeWidth="1" />
-        <text x="450" y="78" textAnchor="middle" className="fill-mid" fontSize="9" fontFamily="var(--font-jetbrains)" letterSpacing="1.6">
+        <text x="450" y="80" textAnchor="middle" className="fill-bright" fontSize="17" fontFamily="var(--font-jetbrains)" letterSpacing="1.6">
           ONE TASK
         </text>
-        <text x="450" y="62" textAnchor="middle" className="fill-dim" fontSize="8" fontFamily="var(--font-jetbrains)" letterSpacing="1.2">
+        <text x="450" y="58" textAnchor="middle" className="fill-mid" fontSize="13" fontFamily="var(--font-jetbrains)" letterSpacing="1.2">
           IDENTICAL ENVIRONMENT
         </text>
       </motion.g>
@@ -204,16 +206,16 @@ function AgentNode({
       transition={{ duration: reduced ? 0 : 0.55, ease: [0.16, 1, 0.3, 1], delay }}
       style={{ transformOrigin: `${x}px ${y}px` }}
     >
-      <rect x={x - 46} y={y - 46} width="92" height="92" fill="#0a0c0e" stroke={accent} strokeOpacity="0.4" />
-      <rect x={x - 38} y={y - 38} width="76" height="76" fill="none" stroke={accent} strokeOpacity="0.16" />
-      <circle cx={x} cy={y} r="5" fill={accent} />
-      <circle cx={x} cy={y} r="14" fill="none" stroke={accent} strokeOpacity="0.35" />
+      <rect x={x - 46} y={y - 46} width="92" height="92" fill="#0d1013" stroke={accent} strokeOpacity="0.9" strokeWidth="1.5" />
+      <rect x={x - 38} y={y - 38} width="76" height="76" fill="none" stroke={accent} strokeOpacity="0.45" />
+      <circle cx={x} cy={y} r="7" fill={accent} />
+      <circle cx={x} cy={y} r="17" fill="none" stroke={accent} strokeOpacity="0.7" />
       <text
         x={x}
-        y={y + 62}
+        y={y + 68}
         textAnchor="middle"
         fill={accent}
-        fontSize="9"
+        fontSize="18"
         fontFamily="var(--font-jetbrains)"
         letterSpacing="1.8"
       >

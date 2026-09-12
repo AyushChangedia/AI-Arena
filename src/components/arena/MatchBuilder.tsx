@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Shuffle } from "lucide-react";
-import type { Agent, Task } from "@/lib/arena/types";
+import type { Agent, Artifact, ExecutionEvent, Match, ScoreDimension, Side, Task } from "@/lib/arena/types";
 import { Button, Chip, Emblem, cx } from "@/components/ui/primitives";
 
 /**
@@ -15,7 +15,45 @@ import { Button, Chip, Emblem, cx } from "@/components/ui/primitives";
  * bare verdict on their models.
  */
 
-export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[] }) {
+/** Everything needed to render a finished match without another request. */
+export interface RanMatch {
+  match: Match;
+  events: ExecutionEvent[];
+  final: Record<Side, FinalSide>;
+}
+
+interface FinalSide {
+  total: number | null;
+  dimensions: ScoreDimension[];
+  ratingBefore: number;
+  ratingAfter: number | null;
+  artifacts: Artifact[];
+}
+
+type RunResponse =
+  | { streamInstead: true; matchId: string }
+  | {
+      streamInstead: false;
+      match: Match;
+      events: ExecutionEvent[];
+      sides: {
+        side: Side;
+        score: { total: number; dimensions: ScoreDimension[] } | null;
+        ratingBefore: number;
+        ratingAfter: number | null;
+        artifacts: Artifact[];
+      }[];
+    };
+
+export function MatchBuilder({
+  agents,
+  tasks,
+  onRan,
+}: {
+  agents: Agent[];
+  tasks: Task[];
+  onRan: (ran: RanMatch) => void;
+}) {
   const router = useRouter();
   const [agentA, setAgentA] = useState<string>(agents[0]?.id ?? "");
   const [agentB, setAgentB] = useState<string>(agents[1]?.id ?? "");
@@ -45,27 +83,52 @@ export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[]
 
   const blocked = !a || !b || !task || sameAgent || toolGap?.emptyA || toolGap?.emptyB;
 
+  /**
+   * Run the match in a single request and show it here.
+   *
+   * The old flow created the match, navigated to /arena/<id> and started it
+   * there. That needs three requests to agree on where the match lives, which
+   * holds on one long-lived process and fails on a serverless host: the match
+   * exists only in the instance that created it, so the page it navigated to
+   * would 404. Running and rendering in place removes the shared state from the
+   * critical path entirely. A model-driven match still needs the stream, and
+   * the server says so.
+   */
   async function start() {
     if (blocked || pending) return;
     setPending(true);
     setError(null);
     try {
-      const response = await fetch("/api/matches", {
+      const response = await fetch("/api/matches/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskId, agentAId: agentA, agentBId: agentB }),
       });
       const body = (await response.json()) as {
         ok: boolean;
-        data?: { id: string };
+        data?: RunResponse;
         error?: { message: string };
       };
       if (!body.ok || !body.data) {
-        setError(body.error?.message ?? "The match could not be created.");
+        setError(body.error?.message ?? "The match could not be run.");
         setPending(false);
         return;
       }
-      router.push(`/arena/${body.data.id}?start=1`);
+      if (body.data.streamInstead) {
+        router.push(`/arena/${body.data.matchId}?start=1`);
+        return;
+      }
+      const final = {} as Record<Side, FinalSide>;
+      for (const side of body.data.sides) {
+        final[side.side] = {
+          total: side.score?.total ?? null,
+          dimensions: side.score?.dimensions ?? [],
+          ratingBefore: side.ratingBefore,
+          ratingAfter: side.ratingAfter,
+          artifacts: side.artifacts,
+        };
+      }
+      onRan({ match: body.data.match, events: body.data.events, final });
     } catch {
       setError("Could not reach the arena. Check the server is running.");
       setPending(false);
@@ -81,22 +144,26 @@ export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[]
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
-      <AgentColumn
-        label="Agent A"
-        agents={agents}
-        selectedId={agentA}
-        otherId={agentB}
-        onSelect={setAgentA}
-        accent="amber"
-      />
+    <div className="flex flex-col gap-4 lg:grid lg:items-start lg:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
+      <div className="order-2 lg:order-none lg:col-start-1 lg:row-start-1">
+        <AgentColumn
+          step={2}
+          label="Agent A"
+          agents={agents}
+          selectedId={agentA}
+          otherId={agentB}
+          onSelect={setAgentA}
+          accent="amber"
+        />
+      </div>
 
-      <div className="order-first flex flex-col gap-4 lg:order-none">
+      <div className="order-1 flex flex-col gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
         <div className="border border-line bg-base">
-          <div className="border-b border-line px-4 py-2.5">
-            <span className="mono-label text-dim">Task</span>
+          <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+            <StepBadge n={1} />
+            <span className="mono-label text-dim">Pick a task</span>
           </div>
-          <div className="max-h-[280px] overflow-y-auto p-2">
+          <div className="p-2 lg:max-h-[280px] lg:overflow-y-auto">
             {tasks.map((t) => (
               <button
                 key={t.id}
@@ -171,6 +238,23 @@ export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[]
           </div>
         ) : null}
 
+      </div>
+
+      <div className="order-3 lg:order-none lg:col-start-3 lg:row-start-1">
+        <AgentColumn
+          step={3}
+          label="Agent B"
+          agents={agents}
+          selectedId={agentB}
+          otherId={agentA}
+          onSelect={setAgentB}
+          accent="cyan"
+        />
+      </div>
+
+      {/* Anything that blocks the match sits with the button it blocks, rather
+          than scrolled off above two agent pickers. */}
+      <div className="order-4 flex flex-col gap-3 lg:col-start-2 lg:row-start-2">
         {sameAgent ? (
           <p className="border border-fail/40 bg-fail-deep px-4 py-3 text-[13px] text-fail">
             An agent cannot face itself. Pick a different opponent.
@@ -183,7 +267,7 @@ export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[]
 
         <div className="flex gap-3">
           <Button tone="primary" onClick={start} disabled={Boolean(blocked) || pending} className="flex-1">
-            {pending ? "Preparing…" : "Start match"}
+            {pending ? "Running the match…" : "Start match"}
             {!pending ? <ArrowRight size={13} aria-hidden /> : null}
           </Button>
           <Button onClick={randomise} title="Pick a random pairing">
@@ -191,20 +275,12 @@ export function MatchBuilder({ agents, tasks }: { agents: Agent[]; tasks: Task[]
           </Button>
         </div>
       </div>
-
-      <AgentColumn
-        label="Agent B"
-        agents={agents}
-        selectedId={agentB}
-        otherId={agentA}
-        onSelect={setAgentB}
-        accent="cyan"
-      />
     </div>
   );
 }
 
 function AgentColumn({
+  step,
   label,
   agents,
   selectedId,
@@ -212,6 +288,7 @@ function AgentColumn({
   onSelect,
   accent,
 }: {
+  step: number;
   label: string;
   agents: Agent[];
   selectedId: string;
@@ -224,10 +301,11 @@ function AgentColumn({
   return (
     <div className="flex flex-col gap-4">
       <div className="border border-line bg-base">
-        <div className="border-b border-line px-4 py-2.5">
+        <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+          <StepBadge n={step} />
           <span className={cx("mono-label", accent === "amber" ? "text-a" : "text-b")}>{label}</span>
         </div>
-        <div className="max-h-[280px] overflow-y-auto p-2">
+        <div className="p-2 lg:max-h-[280px] lg:overflow-y-auto">
           {agents.map((agent) => {
             const isOther = agent.id === otherId;
             return (
@@ -288,5 +366,14 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt className="mono-label text-dim">{label}</dt>
       <dd className="tnum mt-1 truncate font-mono text-[13px] text-mid">{value}</dd>
     </div>
+  );
+}
+
+/** The numeral in a panel header, so the three steps read in order. */
+function StepBadge({ n }: { n: number }) {
+  return (
+    <span className="flex size-[18px] shrink-0 items-center justify-center border border-line-strong bg-surface font-mono text-[10px] leading-none text-mid">
+      {n}
+    </span>
   );
 }

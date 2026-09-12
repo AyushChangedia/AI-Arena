@@ -257,8 +257,24 @@ export interface MatchStream {
   finished: boolean;
 }
 
-export function useMatchStream(matchId: string | null, enabled: boolean): MatchStream {
-  const [queue, setQueue] = useState<ExecutionEvent[]>([]);
+export function useMatchStream(
+  matchId: string | null,
+  enabled: boolean,
+  /**
+   * A complete, already-recorded event list. When given, no connection is
+   * opened: the events are the whole match, so there is nothing to wait for.
+   * Pacing, the speed control and the reducer are untouched, so a recorded
+   * match renders exactly as a streamed one — the events carry the timings the
+   * harness measured either way. Used by the run-in-one-request flow, which is
+   * the only correct shape on a host where the next request may land on a
+   * different instance.
+   */
+  recorded: ExecutionEvent[] | null = null,
+): MatchStream {
+  const isRecorded = recorded !== null;
+  // Seeded at mount rather than pushed in by an effect: a recorded match is
+  // handed to this hook complete, so there is no asynchronous arrival to react to.
+  const [queue, setQueue] = useState<ExecutionEvent[]>(() => recorded ?? []);
   const [cursor, setCursor] = useState(0);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -268,6 +284,7 @@ export function useMatchStream(matchId: string | null, enabled: boolean): MatchS
 
   // ── connection ───────────────────────────────────────────────────────────
   useEffect(() => {
+    if (isRecorded) return;
     if (!matchId || !enabled) return;
 
     const source = new EventSource(`/api/matches/${matchId}/events`);
@@ -305,11 +322,15 @@ export function useMatchStream(matchId: string | null, enabled: boolean): MatchS
       closed = true;
       source.close();
     };
-  }, [matchId, enabled]);
+  }, [isRecorded, matchId, enabled]);
 
   // "Connecting" is the absence of an open event, not a separate stored state.
-  const connectionStatus: ConnectionStatus =
-    status === "idle" && enabled && matchId ? "connecting" : status;
+  // A recorded match has already ended by definition — every event is in hand.
+  const connectionStatus: ConnectionStatus = isRecorded
+    ? "ended"
+    : status === "idle" && enabled && matchId
+      ? "connecting"
+      : status;
 
   // ── paced rendering ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -332,7 +353,7 @@ export function useMatchStream(matchId: string | null, enabled: boolean): MatchS
   }, [queue, cursor, speed]);
 
   const backlog = queue.length - cursor;
-  const finished = status === "ended" && backlog === 0;
+  const finished = connectionStatus === "ended" && backlog === 0;
   const setSpeedStable = useCallback((next: Speed) => setSpeed(next), []);
 
   return useMemo(

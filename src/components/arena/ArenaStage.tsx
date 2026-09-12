@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import Link from "next/link";
-import type { Artifact, Match, MatchResult, ScoreDimension, Side, Task } from "@/lib/arena/types";
+import type {
+  Artifact,
+  ExecutionEvent,
+  Match,
+  MatchResult,
+  ScoreDimension,
+  Side,
+  Task,
+} from "@/lib/arena/types";
 import { AgentPanel } from "./AgentPanel";
 import { EventStream } from "./EventStream";
 import { Countdown } from "./Countdown";
@@ -32,10 +40,20 @@ export function ArenaStage({
   match,
   task,
   autoStart,
+  recorded = null,
+  initialFinal = null,
 }: {
   match: Match;
   task: Task;
   autoStart: boolean;
+  /**
+   * A match that has already been run and returned whole, rather than one this
+   * screen has to start and then follow. Both paths render identically: the
+   * events are the same events, paced the same way.
+   */
+  recorded?: ExecutionEvent[] | null;
+  /** Grading that came back with `recorded`, so no second request is needed. */
+  initialFinal?: Record<Side, FinalSide> | null;
 }) {
   const alreadyRun = match.status === "complete" || match.status === "failed";
   const [countdownDone, setCountdownDone] = useState(!autoStart || alreadyRun);
@@ -46,11 +64,11 @@ export function ArenaStage({
   const started = countdownDone || alreadyRun || match.status === "running";
   const requested = useRef(alreadyRun || match.status === "running");
   const [startError, setStartError] = useState<string | null>(null);
-  const [final, setFinal] = useState<Record<Side, FinalSide> | null>(null);
+  const [final, setFinal] = useState<Record<Side, FinalSide> | null>(initialFinal);
   const [result, setResult] = useState<MatchResult>(match.result);
   const [filter, setFilter] = useState<Side | "all">("all");
 
-  const stream = useMatchStream(match.id, started);
+  const stream = useMatchStream(match.id, started, recorded);
   const { state, backlog, speed, setSpeed, finished, status } = stream;
 
   // The match was server-rendered while still pending, so its environment hash
@@ -134,8 +152,10 @@ export function ArenaStage({
     B: match.participants[1].configSnapshot,
   };
 
+  // Gated on `finished` so a match handed over already-graded still plays out
+  // before its winner is revealed, rather than spoiling itself on first paint.
   const phase: "pre" | "running" | "evaluating" | "complete" =
-    final && result !== null
+    finished && final && result !== null
       ? "complete"
       : state.matchStatus === "evaluating" || (finished && !final)
         ? "evaluating"

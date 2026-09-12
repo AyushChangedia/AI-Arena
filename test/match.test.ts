@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 import { rmSync } from "node:fs";
 import { createMatch, startMatch, resolveMode } from "@/lib/arena/engine";
 import { getStore } from "@/lib/store";
+import { getMatchDetail } from "@/lib/server/queries";
 import { eventBus, topicFor, isTerminator } from "@/lib/arena/events";
 import { allTasks } from "@/lib/tasks";
 import type { ExecutionEvent } from "@/lib/arena/types";
@@ -234,5 +235,39 @@ describe("replayability", () => {
     expect(history.length).toBeGreaterThan(10);
     expect(history.some((e) => e.type === "match.started")).toBe(true);
     expect(history.some((e) => e.type === "match.completed")).toBe(true);
+  });
+});
+
+describe("one request is enough to render a whole match", () => {
+  /**
+   * The arena runs a match and renders it from a single response, because the
+   * create-then-navigate-then-start flow 404s on any host where the next request
+   * may be served by a different instance than the one holding the match.
+   *
+   * That only works while a finished match can be read back complete in one go.
+   * These assertions are the contract /api/matches/run depends on.
+   */
+  it("returns the events, the grading and the verdict together", async () => {
+    const { match } = await runMatch("rate-limiter", "debugger", "shipper");
+    const detail = await getMatchDetail(match.id);
+
+    expect(detail).not.toBeNull();
+    expect(detail!.match.status).toBe("complete");
+    expect(detail!.match.result).not.toBeNull();
+
+    // The playback source. Without these the stage renders an empty arena.
+    expect(detail!.events.length).toBeGreaterThan(10);
+    expect(detail!.events.some((e) => e.type === "match.started")).toBe(true);
+    expect(detail!.events.some((e) => e.type === "match.completed")).toBe(true);
+
+    // The result reveal, which otherwise needs a second request the next
+    // instance cannot answer.
+    expect(detail!.sides).toHaveLength(2);
+    for (const side of detail!.sides) {
+      expect(side.score, `side ${side.side} must be scored`).not.toBeNull();
+      expect(typeof side.score!.total).toBe("number");
+      expect(side.score!.dimensions.length).toBeGreaterThan(0);
+      expect(typeof side.ratingBefore).toBe("number");
+    }
   });
 });
