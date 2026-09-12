@@ -17,6 +17,7 @@ import { getArenaStats, getLeaderboard, listRecentMatches } from "@/lib/server/q
 import { anyProviderConfigured } from "@/lib/agents/providers/registry";
 import { allTasks } from "@/lib/tasks";
 import { codeExecutor } from "@/lib/sandbox/vm";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function LandingPage() {
       {
         "@type": "SoftwareApplication",
         name: "AI Agent Arena",
+        url: SITE_URL,
         applicationCategory: "DeveloperApplication",
         operatingSystem: "Any",
         description:

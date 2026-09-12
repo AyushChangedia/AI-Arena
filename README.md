@@ -24,17 +24,24 @@ That is the whole setup. No API key, no database, no container. Open
 
 ## Live demo
 
-There is no public hosted instance. Run it locally — two commands, no key, no database —
-or put it on a host of your own in one click:
+**<https://ai-agent-arena-ayushchangedias-projects.vercel.app>** — deployed from `main`,
+redeployed on every push.
+
+That instance is on Vercel, which is serverless, so treat its leaderboard as a showcase
+rather than a record: the store is per instance and does not survive a cold start
+([why](#on-serverless-vercel)). Matches themselves run in full — the sandbox, the tools
+and the graders do not care where they execute.
+
+To keep results, run it locally or put it on a container host, which is the shape the
+architecture actually assumes:
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AyushChangedia/AI-Arena)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
 
-Render is the one to use: it reads [`render.yaml`](render.yaml) and gives the app the
-persistent disk and single long-lived process it is designed around. Vercel builds with
-no configuration and is just as fast per match, but it is serverless — read
-[the caveats](#on-serverless-vercel) before you judge the leaderboard by it. See
-[Deploying](#deploying) for the container route and the Fly and Railway configs.
+Render reads [`render.yaml`](render.yaml) and gives the app the persistent disk and
+single long-lived process it is designed around; see [Deploying](#deploying) for the
+Docker route and the Fly and Railway configs. Neither button needs configuring — the
+public origin used for canonical tags and Open Graph is detected from the platform.
 
 Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
 deterministic policies in place of a model. Every match is labelled `DEMO`. See
@@ -190,7 +197,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 230 tests
+npm test           # 239 tests
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order

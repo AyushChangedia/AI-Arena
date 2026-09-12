@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { SiteNav } from "@/components/site/SiteNav";
 import { SiteFooter } from "@/components/site/SiteFooter";
+import { SITE_URL } from "@/lib/site";
 
 const archivo = localFont({
   src: "../fonts/Archivo.woff2",
@@ -27,8 +28,6 @@ const jetbrains = localFont({
   weight: "100 800",
   fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
 });
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

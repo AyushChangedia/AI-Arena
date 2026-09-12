@@ -1,8 +1,7 @@
 import type { MetadataRoute } from "next";
 import { allTasks } from "@/lib/tasks";
 import { getStore } from "@/lib/store";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
