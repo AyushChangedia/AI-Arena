@@ -24,10 +24,12 @@ That is the whole setup. No API key, no database, no container. Open
 
 ## Live demo
 
-**→ <https://ai-agent-arena-eight.vercel.app>**
+Deploy your own in one step — the app needs no API key, no database and no container:
 
-Runs in demo mode: real sandbox, real tools, real graders, deterministic policies in
-place of a model. Every match there is labelled `DEMO`. See
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
+
+A deployed instance runs in demo mode: real sandbox, real tools, real graders,
+deterministic policies in place of a model. Every match there is labelled `DEMO`. See
 [What is real, and what is not](#what-is-real-and-what-is-not).
 
 ## Why an agent benchmark, and not another LLM leaderboard
