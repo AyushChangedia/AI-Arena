@@ -221,7 +221,7 @@ and no caller reaches around it.
 The store and the bus share an assumption: **one long-lived process**. Under that
 assumption both are correct rather than provisional — `/data` persists across restarts,
 and a running match and the SSE stream watching it are guaranteed to be in the same
-process. The shipped `Dockerfile`, `render.yaml`, `fly.toml` and `railway.json` all
+process. The shipped `Dockerfile`, `fly.toml` and `railway.json` all
 describe exactly that: a single container with a volume at `/data` and a health check
 at `/api/health`.
 

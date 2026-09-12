@@ -146,14 +146,19 @@ export default async function SystemPage() {
 
       <section className="mt-12">
         <SectionRule label="Persistence" />
-        <div className="mt-6 flex flex-wrap items-center gap-4 border border-line bg-base px-5 py-4">
-          <Chip tone={store.persistent ? "cyan" : "muted"}>{store.persistent ? "On disk" : "Memory only"}</Chip>
+        <div className="mt-6 flex flex-wrap items-center gap-3 border border-line bg-base px-5 py-4">
+          <Chip tone={store.driver === "postgres" ? "cyan" : "muted"}>
+            {store.driver === "postgres" ? "Postgres" : "File"}
+          </Chip>
+          <Chip tone={store.shared ? "cyan" : "muted"}>
+            {store.shared ? "Shared across instances" : "This instance only"}
+          </Chip>
           <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-dim">{store.location}</code>
         </div>
-        <p className="mt-4 text-[11px] leading-relaxed text-dim">
-          File-backed store with debounced atomic snapshots. It degrades to memory-only on a
-          read-only filesystem rather than crashing. The <code className="font-mono">ArenaStore</code>{" "}
-          interface is the seam for a Postgres driver.
+        <p className="mt-4 max-w-[70ch] text-[11px] leading-relaxed text-dim">
+          {store.shared
+            ? "Postgres, so the leaderboard, match history, permalinks, ownership and votes survive restarts and are the same on every instance."
+            : "File-backed store with debounced atomic snapshots, degrading to memory-only on a read-only filesystem rather than crashing. Correct on one long-lived process and per-instance anywhere else — set DATABASE_URL to share state and survive cold starts."}
         </p>
       </section>
 
@@ -178,16 +183,8 @@ export default async function SystemPage() {
         <ul className="mt-6 divide-y divide-line border-y border-line">
           {[
             {
-              title: "Authentication",
-              body: "The data model carries an owner id and the store is keyed for it, but there is no login and no half-built sign-in screen. Everything runs as a single local owner.",
-            },
-            {
-              title: "Multi-instance realtime",
-              body: "The event bus is in-process. Its three-method interface is ready for a Redis driver; the driver is not written.",
-            },
-            {
-              title: "Human preference voting",
-              body: "Specified as an evaluator in the evaluation docs. It contributes no weight and is not implemented.",
+              title: "Named accounts",
+              body: "Every visitor gets an unguessable id in an httpOnly cookie, so you can edit and delete the agents you built and nobody else can. That is authorization, not accounts: there is no email, no password and no recovery, and clearing cookies means starting over.",
             },
           ].map((item) => (
             <li key={item.title} className="py-4">

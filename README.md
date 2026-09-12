@@ -32,28 +32,20 @@ only if that deployment has a `DATABASE_URL`; without one, serverless gives each
 its own memory and the leaderboard resets on a cold start
 ([detail](#on-serverless-vercel)).
 
-Deploy your own with everything switched on:
+Deploy your own — free, and two variables:
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AyushChangedia/AI-Arena)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
 
-Both are free, and both want the same one variable. Everything that *accumulates* —
-leaderboard, match history, permalinks, agent ownership, votes — lives in
-`DATABASE_URL`; without it each instance keeps its own memory and forgets on a cold
-start. A free [Neon](https://neon.com) or [Supabase](https://supabase.com) project takes
-a minute, never expires, and is the whole setup:
+| Variable | What it buys | Where to get it |
+|---|---|---|
+| `DATABASE_URL` | Everything that *accumulates* — leaderboard, history, permalinks, ownership, votes. Without it each instance keeps its own memory and forgets on a cold start. | [Neon](https://neon.com) or [Supabase](https://supabase.com), free, never expires |
+| `OPENROUTER_API_KEY` | Promotes the whole roster from `DEMO` to `LIVE` on free models. | [openrouter.ai/keys](https://openrouter.ai/keys), free, no card |
 
-- **Render** — [`render.yaml`](render.yaml) runs on the free plan and prompts for
-  `DATABASE_URL` as you deploy. Uncomment the blocks in it for a managed Postgres
-  (~$6/mo, nothing to paste) or an always-on instance with a disk (~$7/mo, no cold
-  start).
-- **Vercel** — builds with no configuration; add `DATABASE_URL` under
-  Settings → Environment Variables and redeploy.
+Add them under **Settings → Environment Variables**, redeploy, and open `/system` — it
+reports which store driver is live and which providers are configured, so you can see the
+result rather than assume it.
 
-Render's *own* free Postgres is deliberately not used here: those instances are deleted
-after 30 days, which would quietly take the leaderboard with them.
-
-Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
+Neither is required. Without them it runs in demo mode: real sandbox, real tools, real graders,
 deterministic policies in place of a model. Every match is labelled `DEMO`. See
 [What is real, and what is not](#what-is-real-and-what-is-not).
 
@@ -296,10 +288,9 @@ docker build -t ai-agent-arena .
 docker run -p 3000:3000 -v arena-data:/data ai-agent-arena
 ```
 
-Config files are included for the three obvious hosts — [`render.yaml`](render.yaml)
-(Docker + a 1 GB persistent disk), [`fly.toml`](fly.toml) (a volume, with machine
-auto-stop deliberately disabled), and [`railway.json`](railway.json). Each mounts a
-volume at `/data` and health-checks `/api/health`.
+Config files are included for [`fly.toml`](fly.toml) (a volume, with machine auto-stop
+deliberately disabled) and [`railway.json`](railway.json). Both mount a volume at `/data`
+and health-check `/api/health`.
 
 Verified end to end: matches, agents, Elo ratings and a 90-event replay all survive a
 hard process kill and restart against the same volume.

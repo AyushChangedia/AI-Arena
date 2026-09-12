@@ -234,7 +234,7 @@ describe("mode resolution", () => {
   it("requires no vendor key anywhere in the shipped configuration", () => {
     // Anthropic, OpenAI and Google adapters still exist for anyone who has
     // those accounts. Nothing in the default setup may depend on them.
-    for (const file of ["render.yaml", ".env.example"]) {
+    for (const file of [".env.example"]) {
       const text = readFileSync(file, "utf8");
       for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"]) {
         if (!text.includes(key)) continue;
