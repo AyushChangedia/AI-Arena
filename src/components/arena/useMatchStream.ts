@@ -46,6 +46,8 @@ export interface SideState {
   files: { path: string; bytes: number; kind: "created" | "modified" }[];
   artifactPath: string | null;
   message: string | null;
+  /** Why the run ended badly, when it did. Null on a healthy run. */
+  failure: { label: string; detail: string | null } | null;
   finished: boolean;
   score: number | null;
 }
@@ -73,6 +75,7 @@ const emptySide = (): SideState => ({
   files: [],
   artifactPath: null,
   message: null,
+  failure: null,
   finished: false,
   score: null,
 });
@@ -218,10 +221,20 @@ function reduce(state: ArenaState, event: ExecutionEvent): ArenaState {
       side.finished = true;
       break;
     case "agent.task_failed":
-    case "agent.limit_reached":
+    case "agent.limit_reached": {
       side.state = event.type === "agent.task_failed" ? "failed" : "blocked";
       side.finished = true;
+      // Kept, not discarded. A provider failure on the first step leaves no
+      // tools, no files and no message, so without this the panel can only say
+      // "awaiting first action" about a run that already ended — and the one
+      // thing the viewer needs is which of a retired model, a rate limit or a
+      // bad key it was.
+      side.failure = {
+        label: event.label,
+        detail: typeof event.detail === "string" && event.detail.trim() ? event.detail : null,
+      };
       break;
+    }
     default:
       break;
   }

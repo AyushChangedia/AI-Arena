@@ -55,6 +55,71 @@ const DEFAULT_FREE_MODELS: { id: string; label: string }[] = [
 /** Used when an agent names a model this adapter does not recognise. */
 export const DEFAULT_FREE_MODEL = DEFAULT_FREE_MODELS[0]!.id;
 
+export interface DiscoveredModel {
+  id: string;
+  label: string;
+  /** Every task here is tool-driven, so this decides whether it can compete. */
+  supportsTools: boolean;
+}
+
+interface ModelListResponse {
+  data?: {
+    id?: string;
+    name?: string;
+    supported_parameters?: string[];
+    pricing?: { prompt?: string; completion?: string };
+  }[];
+}
+
+/**
+ * Ask OpenRouter which free models actually exist right now.
+ *
+ * The shipped defaults are a guess frozen at build time, and free models are
+ * retired without notice — so rather than asking anyone to trust that list, the
+ * app can read the real one. Server-side only; the key never leaves the server
+ * and the result is labels and ids, nothing secret.
+ *
+ * Returns null when unconfigured or unreachable, so the caller can say "could
+ * not check" instead of showing an empty list that looks like "none available".
+ */
+export async function discoverFreeModels(
+  env: Record<string, string | undefined> = process.env,
+  signal?: AbortSignal,
+): Promise<DiscoveredModel[] | null> {
+  const apiKey = env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) return null;
+  const baseUrl = (env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/models`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: signal ?? AbortSignal.timeout(8_000),
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+
+  let body: ModelListResponse;
+  try {
+    body = (await res.json()) as ModelListResponse;
+  } catch {
+    return null;
+  }
+
+  return (body.data ?? [])
+    .filter((m) => typeof m.id === "string" && m.id.endsWith(":free"))
+    .map((m) => ({
+      id: m.id!,
+      label: m.name ?? m.id!,
+      // OpenRouter advertises tool support per model; without it an agent will
+      // talk instead of acting and score near zero on a task it never attempted.
+      supportsTools: (m.supported_parameters ?? []).includes("tools"),
+    }))
+    .sort((a, b) => Number(b.supportsTools) - Number(a.supportsTools) || a.id.localeCompare(b.id));
+}
+
 export class OpenRouterProvider implements ModelProvider {
   readonly id = "openrouter" as const;
   readonly label = "OpenRouter";

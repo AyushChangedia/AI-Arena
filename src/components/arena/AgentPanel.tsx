@@ -113,6 +113,24 @@ export function AgentPanel({
             >
               <ToolCard activity={state.recentTools[0]} accent={accent} />
             </motion.div>
+          ) : state.failure ? (
+            // A run that ended before it acted. Saying "awaiting first action"
+            // about it would be wrong twice over: nothing is awaited, and the
+            // reason it stopped is the only useful thing on the panel.
+            <motion.div
+              key="failure"
+              initial={reduced ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+              className="border border-fail/40 bg-fail-deep p-4"
+            >
+              <p className="mono-label text-fail">{state.failure.label}</p>
+              {state.failure.detail ? (
+                <p className="mt-2 line-clamp-4 break-words text-[12px] leading-relaxed text-mid">
+                  {state.failure.detail}
+                </p>
+              ) : null}
+            </motion.div>
           ) : (
             <motion.p key="waiting" className="mono-label pt-6 text-center text-dim">
               Awaiting first action

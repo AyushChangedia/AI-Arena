@@ -48,6 +48,13 @@ export function ResultReveal({
   }, [phase, reduced]);
 
   const winner = result === "A" ? sides[0] : result === "B" ? sides[1] : null;
+
+  // "double_failure" covers two different things — every assertion failed, or
+  // both runs errored out. Claiming the first when it was the second contradicts
+  // the pass rate printed directly underneath.
+  const passRate = (side: RevealSide): number | null =>
+    side.dimensions.find((d) => d.key === "tests.passRate")?.raw ?? null;
+  const bothFailedEveryAssertion = sides.every((s) => passRate(s) === 0);
   const headline =
     result === "draw"
       ? "Draw"
@@ -86,7 +93,9 @@ export function ResultReveal({
           </p>
         ) : result === "double_failure" ? (
           <p className="mx-auto mt-3 max-w-md text-sm text-dim">
-            Both agents failed every assertion. Two agents failing badly does not crown one of them.
+            {bothFailedEveryAssertion
+              ? "Both agents failed every assertion. Two agents failing badly does not crown one of them."
+              : "Both runs ended in failure, so neither is crowned. The scores below are what each managed before it stopped."}
           </p>
         ) : null}
       </motion.div>

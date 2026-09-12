@@ -136,8 +136,11 @@ OPENROUTER_MODELS="vendor/model:free|Nice Label, vendor/other:free"
 ```
 
 Every model in the arena needs **tool calling** — a model that cannot call tools will talk
-instead of acting and score near zero on a task it never attempted. The defaults are all
-tool-capable; keep that in mind if you override them.
+instead of acting and score near zero on a task it never attempted.
+
+**The table above is a guess frozen at build time**, so `/system` asks OpenRouter which
+free models exist *right now* and lists the tool-capable ones. If an agent reports
+**Model unavailable**, that list is where the working ids are.
 
 Direct `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GOOGLE_API_KEY` still work if you happen
 to have them, and are never required. Adding a vendor is one file implementing
@@ -258,7 +261,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
 npm run dev        # development server
 npm run build      # production build
 npm start          # serve the production build
-npm test           # 295 tests (306 with a database)
+npm test           # 298 tests (309 with a database)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run check      # all four, in order

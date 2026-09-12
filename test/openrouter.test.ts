@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OpenRouterProvider, DEFAULT_FREE_MODEL } from "@/lib/agents/providers/openrouter";
+import { readFileSync } from "node:fs";
+import { OpenRouterProvider, DEFAULT_FREE_MODEL, discoverFreeModels } from "@/lib/agents/providers/openrouter";
 import { ProviderError } from "@/lib/agents/providers/types";
 import type { ProviderRequest } from "@/lib/agents/providers/types";
 import type { ToolSpec } from "@/lib/arena/types";
@@ -245,5 +246,54 @@ describe("failing gracefully on the free tier", () => {
       const error = await failWith(status, { error: { message: "nope" } });
       expect(error!.message).not.toContain("sk-or-v1-test");
     }
+  });
+});
+
+describe("discovering which free models actually exist", () => {
+  function stubModels(status: number, body: unknown) {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }),
+      ),
+    );
+  }
+
+  it("keeps only free models, and marks which can call tools", async () => {
+    stubModels(200, {
+      data: [
+        { id: "vendor/good:free", name: "Good", supported_parameters: ["tools", "temperature"] },
+        { id: "vendor/chat-only:free", name: "Chat Only", supported_parameters: ["temperature"] },
+        { id: "vendor/paid", name: "Paid", supported_parameters: ["tools"] },
+      ],
+    });
+    const models = await discoverFreeModels(KEY);
+    expect(models?.map((m) => m.id)).toEqual(["vendor/good:free", "vendor/chat-only:free"]);
+    // Tool-capable first, because only those can compete here.
+    expect(models?.[0]).toMatchObject({ id: "vendor/good:free", supportsTools: true });
+    expect(models?.[1]!.supportsTools).toBe(false);
+  });
+
+  it("returns null rather than an empty list when it cannot check", async () => {
+    // "Could not check" and "none available" are different claims, and showing
+    // the second when the first is true would be a lie about the free tier.
+    expect(await discoverFreeModels({})).toBeNull();
+
+    stubModels(401, { error: { message: "bad key" } });
+    expect(await discoverFreeModels(KEY)).toBeNull();
+
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
+    expect(await discoverFreeModels(KEY)).toBeNull();
+  });
+});
+
+describe("a match built from a typed brief stays readable", () => {
+  it("rebuilds the custom task on the live arena page", () => {
+    // A live match routes through /arena/<id> rather than rendering in place.
+    // Without this the task cannot be reconstructed from the match and every
+    // model-driven custom brief 404s.
+    const page = readFileSync("src/app/arena/[matchId]/page.tsx", "utf8");
+    expect(page).toMatch(/ensureCustomTask\(match\)/);
+    // Both the page and its metadata read the task, so both need it.
+    expect(page.match(/ensureCustomTask\(match\)/g)).toHaveLength(2);
   });
 });

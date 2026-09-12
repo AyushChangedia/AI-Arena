@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Chip, SectionRule, Shell, Stat, cx, fmtPct } from "@/components/ui/primitives";
 import { storeStatus } from "@/lib/store";
 import { providerStatuses } from "@/lib/agents/providers/registry";
+import { discoverFreeModels } from "@/lib/agents/providers/openrouter";
 import { createSearchBackend } from "@/lib/tools/web";
 import { codeExecutor } from "@/lib/sandbox/vm";
 import { allTools } from "@/lib/tools/registry";
@@ -19,7 +20,14 @@ export const metadata: Metadata = {
 };
 
 export default async function SystemPage() {
-  const [store, stats] = await Promise.all([storeStatus(), getArenaStats()]);
+  // Asked live rather than assumed: the shipped model list is a guess frozen at
+  // build time, and free models are retired without notice. Null means "could
+  // not check", which is not the same as "none available".
+  const [store, stats, freeModels] = await Promise.all([
+    storeStatus(),
+    getArenaStats(),
+    discoverFreeModels(),
+  ]);
   const providers = providerStatuses();
   const search = createSearchBackend();
   const executor = codeExecutor();
@@ -62,6 +70,40 @@ export default async function SystemPage() {
             </li>
           ))}
         </ul>
+        {freeModels ? (
+          <div className="mt-6 border border-line bg-base p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="mono-label text-dim">Free models on OpenRouter right now</span>
+              <Chip tone={freeModels.some((m) => m.supportsTools) ? "cyan" : "muted"}>
+                {freeModels.filter((m) => m.supportsTools).length} usable
+              </Chip>
+            </div>
+            <p className="mt-3 max-w-[70ch] text-[12px] leading-relaxed text-dim">
+              Read from OpenRouter, not from a list baked into this build. Every task here is driven
+              by tool calls, so a model without tool support cannot compete — it talks instead of
+              acting. If an agent reports <span className="text-mid">Model unavailable</span>, put
+              working ids from this list into <code className="font-mono">OPENROUTER_MODELS</code>.
+            </p>
+            <ul className="mt-4 grid gap-1.5">
+              {freeModels
+                .filter((m) => m.supportsTools)
+                .slice(0, 12)
+                .map((m) => (
+                  <li key={m.id} className="flex items-baseline gap-3">
+                    <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-mid">{m.id}</code>
+                    <span className="mono-label shrink-0 text-dim">tools</span>
+                  </li>
+                ))}
+              {freeModels.filter((m) => m.supportsTools).length === 0 ? (
+                <li className="text-[12px] text-fail">
+                  No free model currently advertises tool support. Live matches need one; the arena
+                  runs in DEMO until that changes.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
+
         <p className="mt-4 text-[11px] leading-relaxed text-dim">
           Keys are read server-side only. This page reports whether one is present, never its value,
           length or shape.
