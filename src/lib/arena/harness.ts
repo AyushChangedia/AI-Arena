@@ -594,6 +594,8 @@ function providerFailureLabel(error: ProviderError | null): string {
       return "Rate limited";
     case "auth":
       return "Provider rejected the key";
+    case "bad_request":
+      return "Provider rejected the request";
     case "network":
       return "Provider unreachable";
     case "aborted":

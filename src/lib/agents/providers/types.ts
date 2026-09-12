@@ -68,6 +68,13 @@ export class ProviderError extends Error {
       | "rate_limit"
       /** The model itself is gone or not served — distinct from the key being wrong. */
       | "unavailable"
+      /**
+       * The provider understood the request and refused its shape. Ours to fix,
+       * and worth its own kind: read as a network fault it says "provider
+       * unreachable", which sends everyone looking at the one thing that is
+       * working.
+       */
+      | "bad_request"
       | "network"
       | "bad_response"
       | "aborted",
@@ -140,6 +147,72 @@ export function toJsonSchema(spec: ToolSpec): {
   return { type: "object", properties, required };
 }
 
+/**
+ * Tool names as the wire will accept them.
+ *
+ * The arena names tools with a dotted namespace — `file.read`, `shell.exec` —
+ * which reads well everywhere except on the wire. Every function-calling API in
+ * use here constrains the name: OpenAI-compatible endpoints (OpenRouter
+ * included) reject anything outside `A-Za-z0-9_` with a 400 on the *request*,
+ * so a single dot fails the whole turn before one tool has run, and the agent
+ * shows up as having done nothing rather than as having been refused.
+ *
+ * So the name is projected on the way out and mapped back on the way in. The
+ * registry, the events, the scoring and the UI only ever see the real name;
+ * the substitution lives and dies inside the adapter.
+ */
+export interface ToolNameMap {
+  /** Arena name → wire name. */
+  toWire(name: string): string;
+  /** Wire name → arena name. */
+  fromWire(name: string): string;
+}
+
+/** Longest name any of these APIs accepts. */
+const MAX_WIRE_NAME = 64;
+
+function sanitiseToolName(name: string): string {
+  const cleaned = name.replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+/, "");
+  return (cleaned || "tool").slice(0, MAX_WIRE_NAME);
+}
+
+/**
+ * Build the mapping for one request's tool catalogue.
+ *
+ * Two arena names can sanitise to the same wire name (`file.read` and
+ * `file_read` both give `file_read`), which would silently route one tool's
+ * calls to the other. They are disambiguated by suffix instead — deterministic,
+ * so the same catalogue always produces the same wire names.
+ *
+ * A name the catalogue does not contain passes through `fromWire` untouched:
+ * when a model invents a tool, the registry's "unknown tool" error is the
+ * honest answer and the one the agent can actually recover from.
+ */
+export function toolNameMap(tools: ToolSpec[]): ToolNameMap {
+  const forward = new Map<string, string>();
+  const reverse = new Map<string, string>();
+
+  for (const tool of tools) {
+    let wire = sanitiseToolName(tool.name);
+    if (reverse.has(wire)) {
+      const stem = wire.slice(0, MAX_WIRE_NAME - 3);
+      let n = 2;
+      while (reverse.has(`${stem}_${n}`)) n += 1;
+      wire = `${stem}_${n}`;
+    }
+    forward.set(tool.name, wire);
+    reverse.set(wire, tool.name);
+  }
+
+  return {
+    // The fallback matters for replayed history: a tool name the model invented
+    // last turn comes back through here, and sending its dots would 400 the
+    // next request exactly as the first one.
+    toWire: (name) => forward.get(name) ?? sanitiseToolName(name),
+    fromWire: (name) => reverse.get(name) ?? name,
+  };
+}
+
 /** Tolerant argument coercion — models sometimes send JSON as a string. */
 export function coerceArgs(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
@@ -195,6 +268,11 @@ export async function postJson(
       // broken key and not a network fault, and saying so is the difference
       // between "swap the model" and "check your account".
       throw new ProviderError(`${label} does not serve this model (404). ${detail}`, "unavailable");
+    }
+    if (res.status === 400 || res.status === 422) {
+      // Not the key, not the model, not the network — the body we sent. Saying
+      // so points at the request rather than at the account.
+      throw new ProviderError(`${label} rejected the request (${res.status}). ${detail}`, "bad_request");
     }
     if (res.status === 429) {
       throw new ProviderError(`${label} rate limited (429). ${detail}`, "rate_limit", true);

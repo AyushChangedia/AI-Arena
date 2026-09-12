@@ -1,5 +1,5 @@
 import type { ModelProvider, ProviderRequest, ProviderTurn } from "./types";
-import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema } from "./types";
+import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema, toolNameMap } from "./types";
 
 interface OpenAIResponse {
   choices?: {
@@ -40,6 +40,10 @@ export class OpenAIProvider implements ModelProvider {
       throw new ProviderError("OpenAI is not configured (OPENAI_API_KEY is unset).", "not_configured");
     }
 
+    // Function names on this wire are `[A-Za-z0-9_-]` only, and the arena's are
+    // dotted. Unmapped, the request is rejected outright rather than per tool.
+    const names = toolNameMap(req.tools);
+
     const messages: Record<string, unknown>[] = [{ role: "system", content: req.systemPrompt }];
     for (const m of req.messages) {
       if (m.role === "tool") {
@@ -57,7 +61,7 @@ export class OpenAIProvider implements ModelProvider {
           tool_calls: m.toolCalls.map((tc) => ({
             id: tc.id,
             type: "function",
-            function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+            function: { name: names.toWire(tc.name), arguments: JSON.stringify(tc.args) },
           })),
         });
         continue;
@@ -74,7 +78,11 @@ export class OpenAIProvider implements ModelProvider {
         ...(req.temperature !== null ? { temperature: req.temperature } : {}),
         tools: req.tools.map((t) => ({
           type: "function",
-          function: { name: t.name, description: t.description, parameters: toJsonSchema(t) },
+          function: {
+            name: names.toWire(t.name),
+            description: t.description,
+            parameters: toJsonSchema(t),
+          },
         })),
         tool_choice: "auto",
       },
@@ -89,7 +97,7 @@ export class OpenAIProvider implements ModelProvider {
     const message = choice?.message;
     const toolCalls = (message?.tool_calls ?? []).map((tc) => ({
       id: tc.id ?? crypto.randomUUID(),
-      name: tc.function?.name ?? "",
+      name: names.fromWire(tc.function?.name ?? ""),
       args: coerceArgs(tc.function?.arguments),
     }));
 

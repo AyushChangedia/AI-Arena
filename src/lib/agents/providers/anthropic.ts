@@ -1,5 +1,5 @@
 import type { ModelProvider, ProviderRequest, ProviderTurn } from "./types";
-import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema } from "./types";
+import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema, toolNameMap } from "./types";
 
 interface AnthropicContentBlock {
   type: string;
@@ -42,6 +42,9 @@ export class AnthropicProvider implements ModelProvider {
       throw new ProviderError("Anthropic is not configured (ANTHROPIC_API_KEY is unset).", "not_configured");
     }
 
+    // Tool names here are `[a-zA-Z0-9_-]{1,64}`, and the arena's are dotted.
+    const names = toolNameMap(req.tools);
+
     const messages = req.messages.map((m) => {
       if (m.role === "tool") {
         return {
@@ -64,7 +67,7 @@ export class AnthropicProvider implements ModelProvider {
             ...m.toolCalls.map((tc) => ({
               type: "tool_use" as const,
               id: tc.id,
-              name: tc.name,
+              name: names.toWire(tc.name),
               input: tc.args,
             })),
           ],
@@ -82,7 +85,7 @@ export class AnthropicProvider implements ModelProvider {
         messages,
         ...(req.temperature !== null ? { temperature: req.temperature } : {}),
         tools: req.tools.map((t) => ({
-          name: t.name,
+          name: names.toWire(t.name),
           description: t.description,
           input_schema: toJsonSchema(t),
         })),
@@ -105,7 +108,11 @@ export class AnthropicProvider implements ModelProvider {
       .trim();
     const toolCalls = blocks
       .filter((b) => b.type === "tool_use")
-      .map((b) => ({ id: b.id ?? crypto.randomUUID(), name: b.name ?? "", args: coerceArgs(b.input) }));
+      .map((b) => ({
+        id: b.id ?? crypto.randomUUID(),
+        name: names.fromWire(b.name ?? ""),
+        args: coerceArgs(b.input),
+      }));
 
     const tokensIn = data.usage?.input_tokens ?? null;
     const tokensOut = data.usage?.output_tokens ?? null;

@@ -1,5 +1,6 @@
 import type { ModelProvider, ProviderRequest, ProviderTurn } from "./types";
-import { ProviderError, coerceArgs, postJson, toJsonSchema } from "./types";
+import { ProviderError, coerceArgs, postJson, toJsonSchema, toolNameMap } from "./types";
+import type { ToolNameMap } from "./types";
 
 /**
  * OpenRouter.
@@ -206,6 +207,10 @@ export class OpenRouterProvider implements ModelProvider {
       );
     }
 
+    // The arena's dotted tool names are not legal on this wire; a single one
+    // 400s the request before any tool runs. Mapped out here, mapped back below.
+    const names = toolNameMap(req.tools);
+
     const messages: Record<string, unknown>[] = [{ role: "system", content: req.systemPrompt }];
     for (const m of req.messages) {
       if (m.role === "tool") {
@@ -219,7 +224,7 @@ export class OpenRouterProvider implements ModelProvider {
           tool_calls: m.toolCalls.map((tc) => ({
             id: tc.id,
             type: "function",
-            function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+            function: { name: names.toWire(tc.name), arguments: JSON.stringify(tc.args) },
           })),
         });
         continue;
@@ -230,7 +235,7 @@ export class OpenRouterProvider implements ModelProvider {
     // Resolved before the call, not after a failure: a retired free id is the
     // normal case here, not the exception.
     const model = await this.resolveModel(req.model, req.signal);
-    const data = await this.post({ ...req, model }, messages);
+    const data = await this.post({ ...req, model }, messages, names);
 
     // OpenRouter answers 200 with an error body when the upstream provider
     // fails, so a non-2xx check alone would let a failed turn through as an
@@ -252,7 +257,7 @@ export class OpenRouterProvider implements ModelProvider {
 
     const toolCalls = (message?.tool_calls ?? []).map((tc) => ({
       id: tc.id ?? crypto.randomUUID(),
-      name: tc.function?.name ?? "",
+      name: names.fromWire(tc.function?.name ?? ""),
       args: coerceArgs(tc.function?.arguments),
     }));
 
@@ -285,6 +290,7 @@ export class OpenRouterProvider implements ModelProvider {
   private async post(
     req: ProviderRequest,
     messages: Record<string, unknown>[],
+    names: ToolNameMap,
   ): Promise<OpenRouterResponse> {
     try {
       return (await postJson(
@@ -296,7 +302,11 @@ export class OpenRouterProvider implements ModelProvider {
           ...(req.temperature !== null ? { temperature: req.temperature } : {}),
           tools: req.tools.map((t) => ({
             type: "function",
-            function: { name: t.name, description: t.description, parameters: toJsonSchema(t) },
+            function: {
+              name: names.toWire(t.name),
+              description: t.description,
+              parameters: toJsonSchema(t),
+            },
           })),
           tool_choice: "auto",
         },
@@ -345,6 +355,8 @@ function unavailableAdvice(model: string, message: string): string {
 function classify(error: { message?: string; code?: number }, model: string): ProviderError {
   const message = error.message ?? "OpenRouter error";
   switch (error.code) {
+    case 400:
+      return new ProviderError(`OpenRouter rejected the request: ${message}`, "bad_request");
     case 401:
     case 403:
       return new ProviderError(`OpenRouter rejected the API key: ${message}`, "auth");

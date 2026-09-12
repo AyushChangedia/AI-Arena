@@ -126,7 +126,10 @@ describe("a successful turn", () => {
     // The tool catalogue must survive the projection, or the agent cannot act.
     expect(body.tools).toHaveLength(1);
     const tools = body.tools as { function: { name: string; parameters: unknown } }[];
-    expect(tools[0]!.function.name).toBe("file.write");
+    // Projected, not passed through: this wire rejects the dot outright, with a
+    // 400 on the request that ends the match before any tool has run. The name
+    // is mapped back on the reply, so the registry still sees `file.write`.
+    expect(tools[0]!.function.name).toBe("file_write");
     expect(tools[0]!.function.parameters).toMatchObject({ required: ["path", "content"] });
     // The system prompt leads the conversation.
     expect((body.messages as { role: string }[])[0]!.role).toBe("system");
@@ -141,7 +144,7 @@ describe("a successful turn", () => {
             tool_calls: [
               {
                 id: "call_1",
-                function: { name: "file.write", arguments: '{"path":"/index.html","content":"<h1>hi</h1>"}' },
+                function: { name: "file_write", arguments: '{"path":"/index.html","content":"<h1>hi</h1>"}' },
               },
             ],
           },
@@ -243,6 +246,26 @@ describe("failing gracefully on the free tier", () => {
   it("treats a 402 as needing credits rather than as a bad key", async () => {
     const error = await failWith(402, { error: { message: "Insufficient credits" } });
     expect(error!.kind).toBe("auth");
+  });
+
+  it("blames the request, not the network, when the provider rejects its shape", async () => {
+    // The production symptom this exists for: a malformed request read as a
+    // network fault reports "Provider unreachable", which sends everyone
+    // looking at the one component that was working fine.
+    const error = await failWith(400, {
+      error: { message: "invalid request: tool names can only contain certain characters (A-Za-z0-9_)" },
+    });
+    expect(error!.kind).toBe("bad_request");
+    expect(error!.retryable).toBe(false);
+  });
+
+  it("reads a 400 the provider returns inside a 200 body the same way", async () => {
+    // OpenRouter forwards an upstream failure as a 200 with an error body, so
+    // the in-body code needs the same mapping as the status code.
+    const error = await failWith(200, {
+      error: { message: "Provider returned error", code: 400 },
+    });
+    expect(error!.kind).toBe("bad_request");
   });
 
   it("surfaces a bad key", async () => {

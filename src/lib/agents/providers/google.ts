@@ -1,5 +1,5 @@
 import type { ModelProvider, ProviderRequest, ProviderTurn } from "./types";
-import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema } from "./types";
+import { ProviderError, coerceArgs, postJson, priceFor, toJsonSchema, toolNameMap } from "./types";
 
 interface GooglePart {
   text?: string;
@@ -40,6 +40,11 @@ export class GoogleProvider implements ModelProvider {
       throw new ProviderError("Google is not configured (GOOGLE_API_KEY is unset).", "not_configured");
     }
 
+    // A function declaration name must start with a letter or underscore here,
+    // and a `functionResponse` has to name the same declaration back. Mapping
+    // both through one table keeps them in step.
+    const names = toolNameMap(req.tools);
+
     const contents = req.messages.map((m) => {
       if (m.role === "tool") {
         return {
@@ -47,7 +52,7 @@ export class GoogleProvider implements ModelProvider {
           parts: [
             {
               functionResponse: {
-                name: m.toolName ?? "tool",
+                name: names.toWire(m.toolName ?? "tool"),
                 response: { result: m.content, isError: m.isError ?? false },
               },
             },
@@ -59,7 +64,9 @@ export class GoogleProvider implements ModelProvider {
           role: "model",
           parts: [
             ...(m.content ? [{ text: m.content }] : []),
-            ...m.toolCalls.map((tc) => ({ functionCall: { name: tc.name, args: tc.args } })),
+            ...m.toolCalls.map((tc) => ({
+              functionCall: { name: names.toWire(tc.name), args: tc.args },
+            })),
           ],
         };
       }
@@ -78,7 +85,7 @@ export class GoogleProvider implements ModelProvider {
         tools: [
           {
             functionDeclarations: req.tools.map((t) => ({
-              name: t.name,
+              name: names.toWire(t.name),
               description: t.description,
               parameters: toJsonSchema(t),
             })),
@@ -101,7 +108,7 @@ export class GoogleProvider implements ModelProvider {
       .filter((p) => p.functionCall)
       .map((p) => ({
         id: crypto.randomUUID(),
-        name: p.functionCall?.name ?? "",
+        name: names.fromWire(p.functionCall?.name ?? ""),
         args: coerceArgs(p.functionCall?.args),
       }));
 
