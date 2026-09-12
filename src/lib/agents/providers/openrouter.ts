@@ -179,27 +179,7 @@ export class OpenRouterProvider implements ModelProvider {
       messages.push({ role: m.role, content: m.content });
     }
 
-    const data = (await postJson(
-      `${this.baseUrl}/chat/completions`,
-      {
-        model: req.model,
-        messages,
-        max_tokens: req.maxTokens,
-        ...(req.temperature !== null ? { temperature: req.temperature } : {}),
-        tools: req.tools.map((t) => ({
-          type: "function",
-          function: { name: t.name, description: t.description, parameters: toJsonSchema(t) },
-        })),
-        tool_choice: "auto",
-      },
-      {
-        authorization: `Bearer ${this.apiKey}`,
-        ...(this.referer ? { "HTTP-Referer": this.referer } : {}),
-        "X-Title": this.title,
-      },
-      req.signal,
-      "OpenRouter",
-    )) as OpenRouterResponse;
+    const data = await this.post(req, messages);
 
     // OpenRouter answers 200 with an error body when the upstream provider
     // fails, so a non-2xx check alone would let a failed turn through as an
@@ -242,6 +222,71 @@ export class OpenRouterProvider implements ModelProvider {
       },
     };
   }
+
+  /**
+   * The HTTP call, with OpenRouter's 404 translated on the way out.
+   *
+   * `postJson` maps status codes generically for every provider; what a 404
+   * *means* here is provider-specific, so the advice is added at this level
+   * rather than baked into the shared helper.
+   */
+  private async post(
+    req: ProviderRequest,
+    messages: Record<string, unknown>[],
+  ): Promise<OpenRouterResponse> {
+    try {
+      return (await postJson(
+        `${this.baseUrl}/chat/completions`,
+        {
+          model: req.model,
+          messages,
+          max_tokens: req.maxTokens,
+          ...(req.temperature !== null ? { temperature: req.temperature } : {}),
+          tools: req.tools.map((t) => ({
+            type: "function",
+            function: { name: t.name, description: t.description, parameters: toJsonSchema(t) },
+          })),
+          tool_choice: "auto",
+        },
+        {
+          authorization: `Bearer ${this.apiKey}`,
+          ...(this.referer ? { "HTTP-Referer": this.referer } : {}),
+          "X-Title": this.title,
+        },
+        req.signal,
+        "OpenRouter",
+      )) as OpenRouterResponse;
+    } catch (e) {
+      if (e instanceof ProviderError && e.kind === "unavailable") {
+        throw new ProviderError(unavailableAdvice(req.model, e.message), "unavailable", e.retryable);
+      }
+      throw e;
+    }
+  }
+}
+
+/**
+ * What to actually do about "no endpoints found".
+ *
+ * OpenRouter returns the same 404 for two very different situations, and the
+ * wording points at the wrong one. A free endpoint is paid for with your
+ * prompts, so if the account's privacy settings exclude providers that may
+ * train on inputs, every endpoint for that model is filtered out and the reply
+ * reads as though the model does not exist. That trips people far more often
+ * than an actual retirement, and it takes out every free model at once rather
+ * than one.
+ */
+function unavailableAdvice(model: string, message: string): string {
+  const isFree = model.endsWith(":free");
+  return [
+    `OpenRouter served no endpoint for ${model}: ${message}.`,
+    isFree
+      ? "Free endpoints are the usual cause. If every free model is failing, it is almost certainly the account setting rather than the model — enable free-model training at openrouter.ai/settings/privacy, since free capacity is paid for with your prompts."
+      : "",
+    "Otherwise the id has been retired: /system lists the free models your key can reach right now, and OPENROUTER_MODELS repoints the arena without a redeploy.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** Maps OpenRouter's in-body error codes onto the kinds the harness acts on. */
@@ -254,10 +299,7 @@ function classify(error: { message?: string; code?: number }, model: string): Pr
     case 402:
       return new ProviderError(`${model} needs credits on OpenRouter: ${message}`, "auth");
     case 404:
-      return new ProviderError(
-        `OpenRouter no longer serves ${model}: ${message}. Free models are retired without notice — set OPENROUTER_MODELS to a current one.`,
-        "unavailable",
-      );
+      return new ProviderError(unavailableAdvice(model, message), "unavailable");
     case 429:
       return new ProviderError(
         `OpenRouter rate limited ${model}: ${message}. The free tier is capped per minute and per day.`,

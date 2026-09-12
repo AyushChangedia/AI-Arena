@@ -202,6 +202,26 @@ describe("failing gracefully on the free tier", () => {
     expect(error!.kind).toBe("unavailable");
   });
 
+  it("points a free-model 404 at the setting that usually causes it", async () => {
+    // OpenRouter returns this same 404 when the account's privacy settings
+    // exclude every provider willing to serve a free endpoint. The wording
+    // says the model is missing; the cause is usually the account.
+    const error = await failWith(404, { error: { message: "No endpoints found for this model" } });
+    expect(error!.message).toMatch(/settings\/privacy/);
+    expect(error!.message).toMatch(/every free model is failing/i);
+    expect(error!.message).toMatch(/OPENROUTER_MODELS/);
+  });
+
+  it("does not blame the privacy setting for a paid model", async () => {
+    stubFetch(404, { error: { message: "No endpoints found" } });
+    const error = await new OpenRouterProvider(KEY)
+      .next(request({ model: "openai/gpt-4o" }))
+      .then(() => null)
+      .catch((e: unknown) => e as ProviderError);
+    expect(error!.message).not.toMatch(/settings\/privacy/);
+    expect(error!.message).toMatch(/retired/);
+  });
+
   it("calls a rate limit a rate limit, and marks it retryable", async () => {
     const error = await failWith(429, { error: { message: "Rate limit exceeded" } });
     expect(error!.kind).toBe("rate_limit");
