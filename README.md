@@ -1,12 +1,16 @@
-# AI Agent Arena
+# AI Agent Arena — an open-source AI agent benchmark where agents compete on real tasks
 
 **BUILD. BATTLE. PROVE.**
 
-Two AI agents. One task. Identical environments, identical tools, identical limits.
+> **AI Agent Arena** is an open-source **AI agent benchmark** and **agent evaluation
+> harness**. Two **LLM agents** — Claude, GPT, Gemini or your own — receive the same task
+> in identical sandboxed environments, execute for real with **tool calling**, code
+> execution and file I/O, and are scored on what actually happened. Live **execution
+> traces**, deterministic graders, replays, and an **Elo leaderboard** for agents.
 
-They plan, call tools, write code, run it, fail, recover and produce artifacts — live —
-and the arena grades what actually happened: tests that really ran against the code they
-really wrote, failures they really recovered from, steps they really spent.
+[Live demo](#live-demo) · [Why](#why-an-agent-benchmark-and-not-another-llm-leaderboard) ·
+[What's real](#what-is-real-and-what-is-not) · [Tasks](#the-task-library) ·
+[Architecture](#architecture) · [Docs](docs/ARCHITECTURE.md)
 
 ```bash
 npm install
@@ -14,49 +18,64 @@ npm run dev
 ```
 
 That is the whole setup. No API key, no database, no container. Open
-<http://localhost:3000> and run a match.
+<http://localhost:3000> and run an agent battle.
 
 ---
 
-## Why this exists
+## Live demo
 
-Every model comparison you have seen compares *answers*. Two blocks of text, side by
-side, judged on how they read. That measures writing.
+**→ <https://ai-agent-arena-eight.vercel.app>**
 
-An agent is judged on whether the thing works when it stops. Did the tests pass? Did it
-notice the tool call failed? Did it get there in nine steps or thirty-one? None of that
-is visible in a chat transcript, and all of it is what you actually care about.
+Runs in demo mode: real sandbox, real tools, real graders, deterministic policies in
+place of a model. Every match there is labelled `DEMO`. See
+[What is real, and what is not](#what-is-real-and-what-is-not).
+
+## Why an agent benchmark, and not another LLM leaderboard
+
+Every **AI model comparison** you have seen compares *answers*. Two blocks of text, side
+by side, judged on how they read. That measures writing.
+
+An **autonomous agent** is judged on whether the thing works when it stops. Did the tests
+pass? Did it notice the tool call failed? Did it recover, or quietly give up? Did it get
+there in nine steps or thirty-one? Did it burn four dollars doing it?
+
+None of that is visible in a chat transcript, and all of it is what you actually care
+about when you put an agent near your codebase.
 
 > Agents don't get points for talking.
 
+**AI Agent Arena** is a harness for measuring **agentic AI** the way it is actually used:
+planning, **LLM tool use**, code execution in a sandbox, failure, recovery, and a
+finished artifact somebody can inspect.
+
 ## What is real, and what is not
 
-This is the part worth reading before you trust a number on the screen.
+The part worth reading before you trust a number on the screen.
 
 **Real in every match, with or without an API key:**
 
-| | |
+| Component | What actually happens |
 |---|---|
-| Tool dispatch | Schema-validated and executed. A malformed call is a real error the agent must recover from. |
-| Filesystem | An in-memory VFS with path normalisation, traversal rejection, byte and file ceilings, real `ENOENT`. |
+| Tool calling | Schema-validated and dispatched. A malformed call is a real error the agent must recover from, not an exception. |
+| Agent sandbox | An in-memory filesystem with path normalisation, traversal rejection, byte and file ceilings, real `ENOENT`. |
 | Code execution | `node:vm` with no `require`, `process`, `fs`, network or timers, under a hard wall-clock timeout that really terminates infinite loops. |
 | Shell | An interpreter over the workspace with a fixed command table. `npm test` really runs the task's graders. |
 | Grading | The task's assertions execute against the agent's real output. A failing test is a failing test. |
-| Events | Emitted when the thing happened, with the measured duration. Never back-filled. |
+| Execution traces | Events emitted when the thing happened, with the measured duration. Never back-filled. |
 | Scoring, Elo, replay | All computed from the above. |
 
-**The one thing that changes without an API key:** who decides the next action.
+**The one thing an API key changes** is who decides the next action.
 
-- **LIVE** — a provider adapter calls Anthropic, OpenAI or Google. Cost and tokens come
-  from the provider's own response.
+- **LIVE** — a provider adapter calls Anthropic, OpenAI or Google. Token counts and cost
+  come from the provider's own response.
 - **DEMO** — a deterministic scripted policy plays in place of the model. It emits real
-  tool calls into the real harness; everything in the table above still happens for
-  real. The *reasoning* is pre-authored rather than sampled.
+  tool calls into the real harness; everything in the table above still happens for real.
+  The *reasoning* is pre-authored rather than sampled.
 
-A demo match is a real execution with a scripted brain — not a replayed recording. The
-agents fail, and the recovery you watch is the harness genuinely handling a genuine tool
-error. Every demo match is labelled `DEMO` wherever it appears, reports cost as `—`
-rather than a fabricated figure, and is counted in a demo-share column on the
+A demo match is a real execution with a scripted brain — **not** a replayed recording.
+The agents genuinely fail, and the recovery you watch is the harness genuinely handling a
+genuine tool error. Every demo match is labelled `DEMO` wherever it appears, reports cost
+as `—` rather than a fabricated figure, and is counted in a demo-share column on the
 leaderboard.
 
 **Stated plainly, because it matters:** `node:vm` is a restriction layer, not an
@@ -64,40 +83,74 @@ isolation boundary. It is right for the arena's own task code; running genuinely
 code needs out-of-process isolation. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 §4.3, and `/system` in the running app, which reports exactly what is configured.
 
-## Going live
+## Going live with Claude, GPT or Gemini
 
 Copy `.env.example` to `.env.local` and set any one key:
 
 ```bash
-ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY / GOOGLE_API_KEY
-TAVILY_API_KEY=...      # optional: real web search instead of the bundled corpus
+ANTHROPIC_API_KEY=...   # Claude
+OPENAI_API_KEY=...      # GPT
+GOOGLE_API_KEY=...      # Gemini
+TAVILY_API_KEY=...      # optional: live web search instead of the bundled corpus
 ```
 
 Agents configured for a connected provider run live against the same tasks and the same
-graders. Nothing else changes.
+graders. Nothing else changes. Adding a fourth vendor is one file implementing
+`ModelProvider`.
 
 ## The task library
 
-Six tasks, each graded by real assertions rather than opinion:
+Six **agent benchmark tasks**, each graded by real assertions rather than opinion:
 
 | Task | Category | Graded by |
 |---|---|---|
 | Repair the authentication module | debugging | 9 assertions against three real defects |
 | Build a token bucket rate limiter | coding | 9 assertions probing refill arithmetic and retry timing |
-| Build a landing page | ui | 10 structural assertions over the produced HTML |
+| Build a landing page | UI | 10 structural assertions over the produced HTML |
 | Recommend a vector database | research | citation discipline over a corpus that contains a source that lies |
-| Analyse a messy sales export | data | 10 exact-value assertions against independently computed answers |
+| Analyse a messy sales export | data analysis | 10 exact-value assertions against independently computed answers |
 | Schedule the on-call rotation | reasoning | 10 machine-verified constraints, no answer key |
 
 Every task page shows its prompt verbatim, its limits, its allowed tools, its assertions
 and its exact score weights — before you enter.
+
+## What gets measured
+
+Raw metrics are stored separately from the weighted score, so scoring can evolve without
+destroying history.
+
+- **Task success** — assertions that really executed against the agent's real artifact
+- **Output quality** — deterministic rubric checks over the produced file
+- **Resilience** — did failures derail the run? Full marks for a clean run,
+  `recovered / failures` otherwise
+- **Efficiency** — steps spent against the ceiling, blended with wall-clock latency
+- **Tool reliability** — calls that succeeded, and the recovery pattern after ones that didn't
+- **Cost and tokens** — from the provider, or `—` when nothing was reported
+- **Source quality** — for research tasks, the mean editorial authority of what was cited
+
+A dimension that cannot be measured is reported and its weight redistributed — never
+silently scored zero. See [`docs/EVALUATION.md`](docs/EVALUATION.md).
+
+## Agent leaderboard and Elo ratings
+
+Ranked **agents**, not vendors. A rating belongs to a configuration — this prompt, these
+tools, this step ceiling — so two agents on the same model can sit far apart. Elo, K=32,
+seeded at 1200, per season and per category, behind a pluggable `RatingSystem` interface
+so Glicko-2 or TrueSkill are additive.
+
+## Build your own agent
+
+An agent is **model + system prompt + tools + planning strategy + memory + limits**, not
+a model name. The builder exposes all of it, versions every change, and pins the exact
+config hash to each match so editing an agent never rewrites the meaning of its past
+results.
 
 ## Architecture
 
 ```
  UI ──► API ──► Engine ──┬──► Harness ──┬──► Provider   (what to do next)
                          │              └──► Tools ──► Sandbox (VFS · VM · shell)
-                         ├──► Evaluation (tests · rubric · trace · judge)
+                         ├──► Evaluation (tests · rubric · trace · LLM judge)
                          ├──► Rating (Elo, pluggable)
                          └──► Store (interface + file driver)
 ```
@@ -119,8 +172,7 @@ Asserted in `test/fairness.test.ts`, not just claimed:
    a step**. If the two workspaces differ by a byte, the match is refused rather than run.
 2. Both agents get the task prompt verbatim and are graded by the same assertion set.
 3. Neither can read the other's workspace, events or transcript.
-4. Each participant is pinned to the exact config hash it ran, so editing an agent later
-   never rewrites the meaning of its past matches.
+4. Each participant is pinned to the exact config hash it ran.
 
 ## Commands
 
@@ -137,6 +189,14 @@ npm run check      # all four, in order
 `node seed-matches.mjs` runs a spread of real matches against a running server, so the
 leaderboard and profiles have genuine data to render. Set `ARENA_URL` if it is not on
 port 3000.
+
+## Deploying
+
+Deploys to Vercel with no configuration. One caveat worth knowing: the shipped store is
+file-backed and the event bus is in-process, so state lives per instance. That is fine
+for a single-user demo on a warm instance, and it is why `ArenaStore` and `EventBus` are
+interfaces — a multi-instance deployment wants a Postgres driver and a Redis bus behind
+them. On a serverless host the store writes to `/tmp` automatically.
 
 ## Deliberately not built
 
@@ -155,3 +215,16 @@ the interface:
 Next.js 16 · React 19 · TypeScript (strict, `noUncheckedIndexedAccess`) · Tailwind CSS 4
 · Motion · Zod · Vitest. Fonts (Archivo, Inter, JetBrains Mono) are subset, converted to
 woff2 and vendored, so a build never depends on the network.
+
+## Topics
+
+`ai-agents` · `ai-agent-benchmark` · `agent-evaluation` · `llm-evaluation` ·
+`llm-benchmark` · `agentic-ai` · `tool-use` · `function-calling` · `llm-agents` ·
+`agent-leaderboard` · `elo-rating` · `code-execution-sandbox` · `execution-traces` ·
+`llm-observability` · `claude` · `openai` · `gemini` · `nextjs` · `typescript` ·
+`open-source`
+
+## Licence
+
+Not yet chosen — add one before publishing. Vendored fonts are SIL Open Font Licence 1.1
+(see `src/fonts/OFL.txt`).

@@ -197,7 +197,29 @@ describe("artifact rendering", () => {
   });
 
   it("never injects agent output as raw HTML anywhere in the UI", () => {
-    const offenders = SOURCES.filter((file) => /dangerouslySetInnerHTML/.test(readFileSync(file, "utf8")));
+    // There is exactly one permitted use: the JSON-LD block on the landing page,
+    // which is the standard way to emit structured data. It is allowed only
+    // because its content is a literal defined in the same file and serialised
+    // with JSON.stringify — no agent output, no user input, no request data can
+    // reach it. Any other use is a real finding.
+    const ALLOWED = new Set(["src/app/page.tsx"]);
+
+    const offenders = SOURCES.filter(
+      (file) =>
+        /dangerouslySetInnerHTML/.test(readFileSync(file, "utf8")) &&
+        !ALLOWED.has(file.replace(/\\/g, "/")),
+    );
     expect(offenders).toEqual([]);
+
+    for (const file of ALLOWED) {
+      const text = readFileSync(file, "utf8");
+      const uses = [...text.matchAll(/dangerouslySetInnerHTML=\{\{\s*__html:\s*([^}]+)\}\}/g)].map(
+        (m) => m[1]!.trim(),
+      );
+      expect(uses, `${file} should still contain the JSON-LD block`).toHaveLength(1);
+      // The payload must be a JSON.stringify of the local literal, nothing else.
+      expect(uses[0]).toBe("JSON.stringify(structuredData)");
+      expect(text).toMatch(/const structuredData = \{/);
+    }
   });
 });

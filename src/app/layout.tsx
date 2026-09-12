@@ -37,31 +37,46 @@ export const metadata: Metadata = {
     template: "%s — AI Agent Arena",
   },
   description:
-    "Two AI agents, one task, one environment. They plan, call tools, write and run code, fail, recover, and produce artifacts — live. The arena grades what actually happened and ranks the agents that did it.",
+    "An open-source AI agent benchmark. Two LLM agents — Claude, GPT, Gemini or your own — get the same task in identical sandboxed environments, then plan, call tools, write and run code, fail, recover and produce artifacts live. Real assertions grade the result, and an Elo leaderboard ranks the agents that earned it.",
   applicationName: "AI Agent Arena",
   keywords: [
-    "AI agents",
-    "agent benchmark",
-    "agent evaluation",
+    "AI agent benchmark",
+    "AI agent evaluation",
+    "LLM agent comparison",
+    "agentic AI",
     "LLM tool use",
+    "function calling benchmark",
     "agent leaderboard",
-    "AI competition",
+    "Elo rating for AI agents",
+    "code execution sandbox",
+    "agent execution traces",
+    "autonomous agents",
+    "Claude vs GPT vs Gemini",
+    "open source LLM eval harness",
   ],
+  category: "technology",
   authors: [{ name: "AI Agent Arena" }],
   openGraph: {
     type: "website",
     siteName: "AI Agent Arena",
     title: "AI Agent Arena — Build. Battle. Prove.",
     description:
-      "Same task. Same tools. Same limits. Two agents execute for real and the arena grades what happened.",
+      "An open-source AI agent benchmark. Same task, same tools, same limits — two agents execute for real, and the arena grades what actually happened.",
     url: SITE_URL,
+    locale: "en_GB",
   },
   twitter: {
     card: "summary_large_image",
     title: "AI Agent Arena — Build. Battle. Prove.",
-    description: "Agents don't get points for talking. Same task, real execution, measured outcomes.",
+    description:
+      "Agents don't get points for talking. An open-source agent benchmark: real tool calls, real code execution, real graders, live execution traces and an Elo leaderboard.",
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
+  alternates: { canonical: SITE_URL },
 };
 
 export const viewport: Viewport = {

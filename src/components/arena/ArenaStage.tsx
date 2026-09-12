@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import Link from "next/link";
 import type { Artifact, Match, MatchResult, ScoreDimension, Side, Task } from "@/lib/arena/types";
@@ -39,7 +39,12 @@ export function ArenaStage({
 }) {
   const alreadyRun = match.status === "complete" || match.status === "failed";
   const [countdownDone, setCountdownDone] = useState(!autoStart || alreadyRun);
-  const [started, setStarted] = useState(alreadyRun || match.status === "running");
+  // The stream opens the moment the countdown ends — before the start request
+  // is sent — so it is already listening when the first event fires and nothing
+  // can slip through the gap. Derived, not stored: there is no second source of
+  // truth to keep in sync.
+  const started = countdownDone || alreadyRun || match.status === "running";
+  const requested = useRef(alreadyRun || match.status === "running");
   const [startError, setStartError] = useState<string | null>(null);
   const [final, setFinal] = useState<Record<Side, FinalSide> | null>(null);
   const [result, setResult] = useState<MatchResult>(match.result);
@@ -55,21 +60,19 @@ export function ArenaStage({
     match.envHash ??
     (typeof startedEvent?.data?.envHash === "string" ? startedEvent.data.envHash : null);
 
-  // Kick the run off once the countdown has played.
+  // Ask the engine to run, with the stream already listening.
   useEffect(() => {
-    if (!countdownDone || started) return;
+    if (!started || requested.current) return;
+    requested.current = true;
     let cancelled = false;
 
     (async () => {
       try {
         const response = await fetch(`/api/matches/${match.id}/start`, { method: "POST" });
         const body = (await response.json()) as { ok: boolean; error?: { message: string } };
-        if (cancelled) return;
-        if (!body.ok) {
+        if (!cancelled && !body.ok) {
           setStartError(body.error?.message ?? "The match could not be started.");
-          return;
         }
-        setStarted(true);
       } catch {
         if (!cancelled) setStartError("Could not reach the arena. Check the server is running.");
       }
@@ -78,7 +81,7 @@ export function ArenaStage({
     return () => {
       cancelled = true;
     };
-  }, [countdownDone, started, match.id]);
+  }, [started, match.id]);
 
   // Once the stream has fully drained, load the graded result.
   useEffect(() => {

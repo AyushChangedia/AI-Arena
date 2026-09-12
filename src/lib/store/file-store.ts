@@ -66,7 +66,7 @@ export class FileStore implements ArenaStore {
   private warned = false;
   private readonly file: string;
 
-  constructor(dataDir = process.env.ARENA_DATA_DIR || ".data") {
+  constructor(dataDir = defaultDataDir()) {
     this.file = resolve(process.cwd(), dataDir, "arena.json");
     this.load();
   }
@@ -366,4 +366,19 @@ export class FileStore implements ArenaStore {
 
 function ratingKey(agentId: string, seasonId: string, scope: string): string {
   return `${seasonId}::${scope}::${agentId}`;
+}
+
+/**
+ * Where snapshots go.
+ *
+ * On a serverless host the project directory is read-only, so `.data` would
+ * fail every write and drop the process to memory-only. `/tmp` is writable and
+ * survives for the life of a warm instance, which is what makes a deployed
+ * demo behave sensibly. It is still per-instance: a multi-instance deployment
+ * wants a real database behind `ArenaStore`, which is why that interface exists.
+ */
+function defaultDataDir(): string {
+  if (process.env.ARENA_DATA_DIR) return process.env.ARENA_DATA_DIR;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return "/tmp/arena-data";
+  return ".data";
 }

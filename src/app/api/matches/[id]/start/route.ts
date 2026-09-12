@@ -30,11 +30,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return fail("conflict", `Match #${match.number} has already run. Create a new match to run it again.`);
     }
 
-    const run = startMatch(id);
-    run.catch((e) => {
-      console.error(`[arena] match ${id} failed:`, e instanceof MatchError ? e.message : e);
-    });
-
-    return ok({ matchId: id, status: "running", alreadyRunning: false }, { status: 202 });
+    // Awaited, not fire-and-forget.
+    //
+    // A serverless host terminates the function as soon as the response is
+    // sent, which would kill a match mid-run. The client opens the event stream
+    // *before* calling this endpoint, so awaiting here costs nothing: the run is
+    // already being watched live while this request is still in flight.
+    try {
+      const finished = await startMatch(id);
+      return ok({
+        matchId: id,
+        status: finished.status,
+        result: finished.result,
+        alreadyRunning: false,
+      });
+    } catch (e) {
+      const message = e instanceof MatchError ? e.message : "The match could not be completed.";
+      console.error(`[arena] match ${id} failed:`, e);
+      return fail("unprocessable", message);
+    }
   });
 }

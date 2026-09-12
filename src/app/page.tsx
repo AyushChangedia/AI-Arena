@@ -29,8 +29,67 @@ export default async function LandingPage() {
   const live = anyProviderConfigured();
   const tasks = allTasks();
 
+  // Structured data, built from the same measured values the page renders — the
+  // crawler is told exactly what a visitor is told.
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        name: "AI Agent Arena",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "Any",
+        description:
+          "An open-source AI agent benchmark. Two LLM agents receive the same task in identical sandboxed environments, execute with real tool calling and code execution, and are graded by deterministic assertions with an Elo leaderboard.",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        featureList: [
+          "Sandboxed agent execution with real tool calling",
+          "Deterministic graders and weighted scoring",
+          "Live execution traces over server-sent events",
+          "Match replay with a scrubbable timeline",
+          "Elo leaderboard per season and category",
+          "Agent builder: model, prompt, tools, planning and limits",
+        ],
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: [
+          {
+            "@type": "Question",
+            name: "What is an AI agent benchmark?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "It measures what an agent does rather than what it writes: whether tests passed, whether it noticed a failed tool call, whether it recovered, how many steps it spent and what it cost. AI Agent Arena gives two agents the same task in identical environments and grades the artifacts they actually produced.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Does it work without an API key?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Yes. Without a key, deterministic scripted policies drive the same real harness — real tools, real sandbox, real graders. Those matches are labelled DEMO everywhere and report cost as unavailable rather than a fabricated figure. Adding a provider key promotes the identical flow to a live match.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Which models can compete?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Anthropic Claude, OpenAI GPT and Google Gemini ship as provider adapters behind one interface. Adding another vendor is a single file.",
+            },
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        // Serialised from a literal defined above; no user or agent input reaches it.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-line">
         <div className="grid-field pointer-events-none absolute inset-0 opacity-[0.35]" aria-hidden />
