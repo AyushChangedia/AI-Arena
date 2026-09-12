@@ -37,11 +37,21 @@ Deploy your own with everything switched on:
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AyushChangedia/AI-Arena)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAyushChangedia%2FAI-Arena)
 
-**Render is one click and nothing else.** [`render.yaml`](render.yaml) provisions the
-Postgres alongside the web service and wires `DATABASE_URL` into it, so persistence,
-shared state, ownership and votes all work on the first deploy with nothing to configure.
-Vercel builds with no configuration too — add a `DATABASE_URL` from any Postgres (Neon,
-Supabase, Railway) in the project's environment variables and it is equally complete.
+Both are free, and both want the same one variable. Everything that *accumulates* —
+leaderboard, match history, permalinks, agent ownership, votes — lives in
+`DATABASE_URL`; without it each instance keeps its own memory and forgets on a cold
+start. A free [Neon](https://neon.com) or [Supabase](https://supabase.com) project takes
+a minute, never expires, and is the whole setup:
+
+- **Render** — [`render.yaml`](render.yaml) runs on the free plan and prompts for
+  `DATABASE_URL` as you deploy. Uncomment the blocks in it for a managed Postgres
+  (~$6/mo, nothing to paste) or an always-on instance with a disk (~$7/mo, no cold
+  start).
+- **Vercel** — builds with no configuration; add `DATABASE_URL` under
+  Settings → Environment Variables and redeploy.
+
+Render's *own* free Postgres is deliberately not used here: those instances are deleted
+after 30 days, which would quietly take the leaderboard with them.
 
 Either way it runs in demo mode out of the box: real sandbox, real tools, real graders,
 deterministic policies in place of a model. Every match is labelled `DEMO`. See

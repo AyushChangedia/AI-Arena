@@ -1,40 +1,56 @@
-# Render Blueprint — a web service and the Postgres it stores everything in.
+# Render Blueprint.
 #
-# Provisioned together so a one-click deploy lands on the full product rather
-# than a demo that forgets itself: DATABASE_URL is wired from the database
-# below, so matches, agents, Elo ratings and votes are shared across instances
-# and survive every restart and redeploy with nothing to configure.
+# Free as written. Render's free web service has no persistent disk, so the one
+# thing it needs to keep results is a database — paste a connection string into
+# DATABASE_URL when the blueprint asks. A free Neon or Supabase project takes a
+# minute and does not expire.
 #
-# The disk is still mounted. It is the fallback the app uses if the database is
-# ever unreachable, and it costs nothing to keep.
-databases:
-  - name: arena-db
-    databaseName: arena
-    user: arena
-    plan: basic-256mb
-
+# Deliberately NOT using Render's own free Postgres: those instances are deleted
+# after 30 days, which would quietly take the leaderboard with them a month after
+# you stopped thinking about it.
+#
+# Two paid upgrades, both optional and both commented out below:
+#   • a managed Postgres provisioned alongside the service (~$6/month), so there
+#     is nothing to paste
+#   • an always-on instance with a disk (~$7/month), which removes the cold start
+#     and makes the file store durable on its own
 services:
   - type: web
     name: ai-agent-arena
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: free
     healthCheckPath: /api/health
     autoDeploy: true
-    disk:
-      name: arena-data
-      mountPath: /data
-      sizeGB: 1
+
+    # ── Always-on upgrade ────────────────────────────────────────────────────
+    # A free instance sleeps after inactivity and takes ~50s to wake. Switch the
+    # plan above to `starter` and uncomment the disk for an instance that never
+    # sleeps and keeps /data across restarts. (A disk requires a paid plan.)
+    # disk:
+    #   name: arena-data
+    #   mountPath: /data
+    #   sizeGB: 1
+
     envVars:
       - key: NODE_ENV
         value: production
       - key: ARENA_DATA_DIR
         value: /data
-      # Shared, durable storage. Everything else follows from this one variable.
+
+      # Shared, durable storage. Everything that accumulates — the leaderboard,
+      # match history, permalinks, agent ownership, votes — follows from this one
+      # variable. Render prompts for it when you deploy the blueprint.
+      #
+      # Swap for the `fromDatabase` block below if you would rather Render
+      # provision and wire it for you.
       - key: DATABASE_URL
-        fromDatabase:
-          name: arena-db
-          property: connectionString
+        sync: false
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: arena-db
+      #     property: connectionString
+
       # The public origin, so canonical tags and Open Graph point at the real
       # host rather than the platform's internal one.
       - key: NEXT_PUBLIC_SITE_URL
@@ -42,7 +58,9 @@ services:
           name: ai-agent-arena
           type: web
           property: host
-      # Set these in the dashboard to promote DEMO matches to LIVE.
+
+      # Set any one of these to promote DEMO matches to LIVE. A match runs live
+      # only when BOTH agents have a key for their provider.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: OPENAI_API_KEY
@@ -51,3 +69,13 @@ services:
         sync: false
       - key: TAVILY_API_KEY
         sync: false
+
+# ── Managed Postgres upgrade ───────────────────────────────────────────────
+# Uncomment this and the `fromDatabase` block above to have Render create the
+# database and wire it in, with nothing to paste. Paid: Render's free Postgres
+# is deleted after 30 days, so it is not offered here as a default.
+# databases:
+#   - name: arena-db
+#     databaseName: arena
+#     user: arena
+#     plan: basic-256mb
