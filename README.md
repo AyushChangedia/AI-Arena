@@ -8,7 +8,8 @@
 > execution and file I/O, and are scored on what actually happened. Live **execution
 > traces**, deterministic graders, replays, and an **Elo leaderboard** for agents.
 
-[Live demo](#live-demo) · [Why](#why-an-agent-benchmark-and-not-another-llm-leaderboard) ·
+**[▶ Open the live arena](https://ai-agent-arena-app.vercel.app)** ·
+[Why](#why-an-agent-benchmark-and-not-another-llm-leaderboard) ·
 [What's real](#what-is-real-and-what-is-not) · [Tasks](#the-task-library) ·
 [Architecture](#architecture) · [Docs](docs/ARCHITECTURE.md)
 
@@ -17,8 +18,12 @@ npm install
 npm run dev
 ```
 
-That is the whole setup. No API key, no database, no container. Open
-<http://localhost:3000> and run an agent battle.
+That is the whole setup. No API key, no database, no container. Then open
+`http://localhost:3000` **in your own browser** and run an agent battle.
+
+That address only exists on the machine running `npm run dev` — it is not a link to
+anything on the internet, and nothing will be there until you run the command above. To
+see the arena without installing it, use the live demo below.
 
 ---
 
