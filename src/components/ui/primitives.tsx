@@ -124,16 +124,21 @@ export function Stat({
   label,
   value,
   hint,
+  note,
   tone,
   className,
 }: {
   label: string;
   value: string | number | null | undefined;
+  /** Why the value is missing. Shown only under a dash. */
   hint?: string;
+  /** A caption that describes the value. Always shown. */
+  note?: string;
   tone?: "amber" | "cyan" | "fail";
   className?: string;
 }) {
-  const missing = value === null || value === undefined || value === "";
+  // The fmt* helpers return "—" for null, so treat that as missing too.
+  const missing = value === null || value === undefined || value === "" || value === "—";
   const toneClass = tone === "amber" ? "text-a" : tone === "cyan" ? "text-b" : tone === "fail" ? "text-fail" : "text-text";
   return (
     <div className={cx("flex flex-col gap-1", className)}>
@@ -144,7 +149,8 @@ export function Stat({
       >
         {missing ? "—" : value}
       </span>
-      {hint && !missing ? <span className="text-[11px] text-dim">{hint}</span> : null}
+      {missing && hint ? <span className="text-[11px] text-dim">{hint}</span> : null}
+      {note ? <span className="text-[11px] text-dim">{note}</span> : null}
     </div>
   );
 }
