@@ -109,7 +109,7 @@ export default async function AgentProfilePage({ params }: Props) {
           <Stat label="Record" value={record.matches ? `${record.wins}-${record.losses}-${record.draws}` : null} />
           <Stat label="Win rate" value={fmtPct(record.winRate)} tone="amber" />
           <Stat label="Avg score" value={fmtScore(record.avgScore)} />
-          <Stat label="Success" value={fmtPct(record.successRate)} hint="runs that finished cleanly" />
+          <Stat label="Success" value={fmtPct(record.successRate)} note="runs that finished cleanly" />
           <Stat label="Recovery" value={fmtPct(record.recoveryRate)} hint="no failures yet" />
         </dl>
         <dl className="mt-8 grid gap-6 sm:grid-cols-3">
